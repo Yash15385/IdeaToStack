@@ -1,0 +1,6 @@
+{
+  "name": "IdeaToStack",
+  "description": "High-velocity developer infrastructure engine that turns natural language ideas into production-ready architecture blueprints, interactive topology graphs, and deployment stacks.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
