@@ -33,7 +33,7 @@ const ai = apiKey
     })
   : null;
 
-app.get('/api/health', (_req: Request, res: Response) => {
+app.get(['/api/health', '/health'], (_req: Request, res: Response) => {
   res.json({
     status: 'healthy',
     geminiConfigured: !!ai,
@@ -44,7 +44,7 @@ app.get('/api/health', (_req: Request, res: Response) => {
 /**
  * Generates an architectural stack blueprint from a natural language idea prompt.
  */
-app.post('/api/generate-stack', async (req: Request, res: Response) => {
+app.post(['/api/generate-stack', '/generate-stack'], async (req: Request, res: Response) => {
   const { prompt, constraints } = req.body;
 
   if (!prompt || typeof prompt !== 'string') {
@@ -163,7 +163,7 @@ Constraints:
     const enrichedServices = parsedJson.services.map((s: any) => {
       const layer = s.layer || 'compute';
       layerYCounts[layer] = (layerYCounts[layer] || 0) + 1;
-      const yOffset = 80 + (layerYCounts[layer] - 1) * 120;
+      const yOffset = 160 + (layerYCounts[layer] - 1) * 150;
 
       return {
         ...s,
@@ -232,4 +232,8 @@ async function startServer() {
   });
 }
 
-startServer();
+export default app;
+
+if (!process.env.VERCEL && process.env.NODE_ENV !== 'test') {
+  startServer();
+}

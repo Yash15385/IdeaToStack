@@ -78,32 +78,32 @@ export const TopNav: React.FC<TopNavProps> = ({
 
         <button
           onClick={() => onSelectTab('deploy')}
-          className={`px-4 py-1.5 text-xs font-medium rounded-full transition-all whitespace-nowrap shrink-0 flex items-center gap-2 ${
+          className={`px-4 py-1.5 text-xs font-medium rounded-full transition-all whitespace-nowrap shrink-0 flex items-center gap-1.5 ${
             activeTab === 'deploy'
               ? 'bg-zinc-800 text-white shadow-sm border border-indigo-500/30'
               : 'text-zinc-400 hover:text-zinc-200'
           }`}
         >
-          <Terminal className="w-3.5 h-3.5" />
+          <span className="font-mono text-xs text-indigo-400">&gt;_</span>
           <span>Deploy & Boilerplate</span>
         </button>
       </nav>
 
       {/* Zone 3: 1 primary action */}
-      <div className="flex items-center gap-2 sm:gap-3 shrink-0">
-        <div className="hidden lg:flex items-center gap-2 text-xs text-zinc-400">
-          <span className="inline-block w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-          <span className="font-mono text-[11px] text-emerald-400">{validationScore}% Validated</span>
+      <div className="flex items-center gap-2 sm:gap-4 shrink-0">
+        <div className="hidden lg:flex items-center gap-2 text-xs">
+          <span className="inline-block w-2 h-2 rounded-full bg-emerald-500 animate-pulse shadow-[0_0_8px_#10b981]" />
+          <span className="font-mono text-xs text-emerald-400 font-medium">100% Validated</span>
         </div>
 
         <button
           onClick={onSynthesizeClick}
           disabled={isSynthesizing}
-          className="relative px-3 sm:px-4 py-2 text-xs font-medium text-white bg-indigo-600 rounded hover:bg-indigo-500 transition-all shadow-[0_0_16px_rgba(99,102,241,0.35)] border-t border-white/25 active:translate-y-0.5 disabled:opacity-50 whitespace-nowrap shrink-0 flex items-center gap-1.5 sm:gap-2"
+          className="relative px-3 sm:px-4 py-2 text-xs font-semibold text-white bg-indigo-600 rounded-md hover:bg-indigo-500 transition-all shadow-[0_0_16px_rgba(99,102,241,0.35)] border-t border-white/25 active:translate-y-0.5 disabled:opacity-50 whitespace-nowrap shrink-0 flex items-center gap-1.5 sm:gap-2"
         >
           <Sparkles className={`w-3.5 h-3.5 ${isSynthesizing ? 'animate-spin' : ''}`} />
-          <span>{isSynthesizing ? 'Synthesizing...' : 'Synthesize'}</span>
-          <span className="hidden sm:inline">Stack</span>
+          <span className="hidden sm:inline">{isSynthesizing ? 'Synthesizing...' : 'Synthesize Architecture'}</span>
+          <span className="sm:hidden">{isSynthesizing ? '...' : 'Synthesize'}</span>
         </button>
       </div>
     </header>

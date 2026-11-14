@@ -328,17 +328,47 @@ export function swapService(
   };
 
   // Adjust cost profile if known
-  if (alternativeName.toLowerCase().includes('supabase')) {
+  const altLower = alternativeName.toLowerCase();
+  if (altLower.includes('supabase')) {
     updatedService.costEstimatePerMonth = 25;
     updatedService.version = 'v2.64.0';
-  } else if (alternativeName.toLowerCase().includes('redis')) {
+    updatedService.dockerImage = 'supabase/postgres:latest';
+  } else if (altLower.includes('qdrant self-hosted') || altLower.includes('gce e2-micro')) {
+    updatedService.costEstimatePerMonth = 7;
+    updatedService.version = 'v1.12.0';
+    updatedService.dockerImage = 'qdrant/qdrant:v1.12.0';
+    updatedService.latencyProfile = '22ms p95 self-hosted';
+  } else if (altLower.includes('pgvector on neon') || altLower.includes('pgvector')) {
+    updatedService.costEstimatePerMonth = 0;
+    updatedService.version = 'v16.4';
+    updatedService.dockerImage = 'neondatabase/neon_postgres:latest';
+    updatedService.latencyProfile = '24ms p95 vector scan';
+  } else if (altLower.includes('remix')) {
+    updatedService.costEstimatePerMonth = 0;
+    updatedService.version = 'v2.8.0';
+    updatedService.latencyProfile = '12ms edge SSR';
+  } else if (altLower.includes('fastify')) {
+    updatedService.costEstimatePerMonth = 15;
+    updatedService.version = 'v4.26';
+    updatedService.latencyProfile = '35ms warm p95';
+  } else if (altLower.includes('vertex ai') || altLower.includes('gemini 1.5')) {
+    updatedService.costEstimatePerMonth = 20;
+    updatedService.version = 'gemini-1.5-pro';
+    updatedService.latencyProfile = '240ms TTFT streaming';
+  } else if (altLower.includes('gcp memory') || altLower.includes('memorystore')) {
+    updatedService.costEstimatePerMonth = 16;
+    updatedService.version = 'v7.0';
+  } else if (altLower.includes('bullmq')) {
+    updatedService.costEstimatePerMonth = 10;
+    updatedService.version = 'v5.4.0';
+  } else if (altLower.includes('redis')) {
     updatedService.costEstimatePerMonth = 15;
     updatedService.version = 'v7.2.4';
-  } else if (alternativeName.toLowerCase().includes('dragonfly')) {
+  } else if (altLower.includes('dragonfly')) {
     updatedService.costEstimatePerMonth = 12;
     updatedService.version = 'v1.14.0';
-  } else if (alternativeName.toLowerCase().includes('clickhouse')) {
-    updatedService.costEstimatePerMonth = 40;
+  } else if (altLower.includes('clickhouse')) {
+    updatedService.costEstimatePerMonth = 35;
     updatedService.version = 'v24.2';
   }
 
@@ -543,7 +573,7 @@ export function synthesizeDefaultBlueprint(
     };
   }
 
-  // Profile 2: AI Agent / LLM RAG Pipeline
+  // Profile 2: AI Agent / LLM RAG Pipeline (Matches artifacts r2, r3, r4, r5)
   if (
     promptLower.includes('ai') ||
     promptLower.includes('llm') ||
@@ -551,119 +581,197 @@ export function synthesizeDefaultBlueprint(
     promptLower.includes('rag') ||
     promptLower.includes('vector') ||
     promptLower.includes('gemini') ||
-    promptLower.includes('bot')
+    promptLower.includes('bot') ||
+    promptLower.includes('research')
   ) {
     const services: StackServiceNode[] = [
       {
-        id: 'client-chat',
-        name: 'Next.js 15 App Router + Tailwind',
+        id: 'client-nextjs',
+        name: 'Next.js Research UI',
         layer: 'client',
-        version: 'v15.2.0',
-        category: 'Streaming Web Client',
-        description: 'Server components with SSE streaming hook for real-time generative tokens and interactive markdown.',
+        version: '15.1',
+        category: 'Frontend SPA',
+        description: 'Streaming Next.js client with SSE tokens, reactive markdown rendering, and vector citations.',
         status: 'healthy',
         costEstimatePerMonth: 0,
-        latencyProfile: '< 30ms TTFB',
-        dockerImage: 'node:22-alpine',
-        envVariables: { NEXT_PUBLIC_API_URL: 'https://api.agentic.internal' },
+        latencyProfile: '15ms TTFB global static edge',
+        dockerImage: 'client-nextjs:latest',
+        envVariables: { NEXT_PUBLIC_API_URL: 'https://agent-api.internal', VITE_AUTH_DOMAIN: 'auth.internal' },
         ports: ['3000:3000'],
-        alternatives: ['Remix Vite', 'Astro 4', 'Vite React 19 SPA'],
-        tags: ['nextjs', 'react', 'streaming', 'tailwind'],
+        alternatives: ['Remix on Cloudflare', 'SvelteKit 2'],
+        tags: ['typescript', 'nextjs'],
         position: { x: 80, y: 160 },
       },
       {
-        id: 'edge-router',
-        name: 'Kong API Gateway',
+        id: 'edge-cloudflare',
+        name: 'Cloudflare Edge & WAF',
         layer: 'edge',
-        version: 'v3.5',
-        category: 'API Gateway & Rate Limiter',
-        description: 'Token quota enforcement, API key validation, and SSE connection pass-through.',
+        version: '2025.1',
+        category: 'CDN & API Gateway',
+        description: 'Edge routing, WAF defense, DDoS mitigation, and global SSE stream passthrough.',
         status: 'healthy',
-        costEstimatePerMonth: 10,
-        latencyProfile: '< 2ms gateway',
-        dockerImage: 'kong:3.5-alpine',
-        envVariables: { KONG_DATABASE: 'off', KONG_DECLARATIVE_CONFIG: '/etc/kong/kong.yml' },
-        ports: ['8000:8000', '8443:8443'],
-        alternatives: ['Cloudflare API Shield', 'Tyk Gateway', 'FastAPI Proxy'],
-        tags: ['api-gateway', 'rate-limit', 'auth'],
+        costEstimatePerMonth: 0,
+        latencyProfile: '12ms p95 edge routing',
+        dockerImage: 'edge-cloudflare:latest',
+        envVariables: { CF_ZONE: 'agent_mesh_01', RATE_LIMIT_RPM: '1200' },
+        ports: ['443:443'],
+        alternatives: ['GCP Cloud Armor + Load Balancer'],
+        tags: ['cdn', 'waf'],
         position: { x: 300, y: 160 },
       },
       {
         id: 'compute-agent',
-        name: 'Python FastAPI / LangChain Engine',
+        name: 'TypeScript Agent Orchestrator',
         layer: 'compute',
-        version: 'v0.110.0',
-        category: 'Agentic Orchestration Runtime',
-        description: 'Async task execution, prompt synthesis, tool calling, and Gemini API integration.',
+        version: '22-alpine',
+        category: 'Cloud Run Service',
+        description: 'Hono/Node runtime coordinating multi-step Gemini tool calling, Qdrant searches, and Celery tasks.',
         status: 'healthy',
-        costEstimatePerMonth: 30,
-        latencyProfile: '< 25ms cold',
-        dockerImage: 'tiangolo/uvicorn-gunicorn-fastapi:python3.11',
-        envVariables: { GEMINI_API_KEY: 'env(SECRET)', VECTOR_URL: 'http://db-qdrant:6333', REDIS_URL: 'redis://cache-redis:6379' },
-        ports: ['8000:8000'],
-        alternatives: ['Go LangGraph', 'TypeScript LangChain Node', 'Rust Actix Agent'],
-        tags: ['fastapi', 'python', 'ai-agent', 'gemini'],
+        costEstimatePerMonth: 8,
+        latencyProfile: '45ms warm p95, 650ms cold start',
+        dockerImage: 'us-central1-docker.pkg.dev/agent:latest',
+        envVariables: { PORT: '8080', NODE_ENV: 'production', GEMINI_MODEL: 'gemini-2.5-flash', QDRANT_URL: 'https://qdrant.internal:6333' },
+        ports: ['8080:8080'],
+        alternatives: ['Fastify on ECS', 'Python FastAPI'],
+        tags: ['typescript', 'hono'],
         position: { x: 520, y: 160 },
       },
       {
-        id: 'db-qdrant',
-        name: 'Qdrant Vector Database',
-        layer: 'data',
-        version: 'v1.7.4',
-        category: 'Vector Similarity Engine',
-        description: 'High-dimensional semantic vector indexing, payload filtering, and sub-10ms similarity queries.',
+        id: 'compute-gemini',
+        name: 'Google Gemini 2.5 Flash API',
+        layer: 'compute',
+        version: 'gemini-2.5-flash',
+        category: 'Managed LLM & Embeddings',
+        description: 'High-throughput multimodal reasoning, prompt synthesis, structured schema extraction, and embeddings.',
         status: 'healthy',
-        costEstimatePerMonth: 25,
-        latencyProfile: '< 7ms recall',
-        dockerImage: 'qdrant/qdrant:v1.7.4',
-        envVariables: { QDRANT_SERVICE_PORT: '6333' },
-        ports: ['6333:6333'],
-        alternatives: ['pgvector Postgres', 'Milvus', 'ChromaDB'],
-        tags: ['vector-db', 'rag', 'embeddings', 'similarity'],
-        position: { x: 740, y: 80 },
+        costEstimatePerMonth: 12,
+        latencyProfile: '180ms TTFT streaming',
+        dockerImage: 'compute-gemini-api:latest',
+        envVariables: { GEMINI_API_KEY: 'env(SECRET)', EMBEDDING_MODEL: 'text-embedding-004' },
+        ports: [],
+        alternatives: ['Vertex AI Gemini 1.5 Pro', 'Claude 3.5 Sonnet'],
+        tags: ['gemini', 'llm'],
+        position: { x: 520, y: 310 },
       },
       {
-        id: 'db-postgres',
-        name: 'PostgreSQL 16 (Auditing & Memory)',
+        id: 'data-qdrant',
+        name: 'Qdrant Cloud Vector Memory',
         layer: 'data',
-        version: 'v16.1',
-        category: 'Conversation & User Ledger',
-        description: 'Session histories, structured agent evaluations, feedback metrics, and user tenancy.',
+        version: '1.12',
+        category: 'Vector Database',
+        description: 'Managed Qdrant cluster storing 768-dimensional document chunk embeddings with payload filtering for multi-tenant citation retrieval and long-term agent memory.',
         status: 'healthy',
-        costEstimatePerMonth: 20,
-        latencyProfile: '< 5ms query',
-        dockerImage: 'postgres:16-alpine',
-        envVariables: { POSTGRES_DB: 'agent_logs', POSTGRES_PASSWORD: 'secure_password' },
+        costEstimatePerMonth: 10,
+        latencyProfile: '18ms p95 HNSW cosine search',
+        dockerImage: 'data-qdrant:latest',
+        envVariables: { PORT: '8080', NODE_ENV: 'production', QDRANT_STORAGE_PATH: '/qdrant/storage' },
+        ports: ['6333:6333', '6334:6334'],
+        alternatives: ['Qdrant Self-Hosted on GCE e2-micro', 'pgvector on Neon'],
+        tags: ['qdrant', 'vector-db'],
+        position: { x: 740, y: 160 },
+      },
+      {
+        id: 'data-neon',
+        name: 'Neon Serverless Postgres',
+        layer: 'data',
+        version: '16.4',
+        category: 'Relational Database',
+        description: 'Serverless branching relational database managing tenant workspaces, user accounts, and billing records.',
+        status: 'healthy',
+        costEstimatePerMonth: 0,
+        latencyProfile: '25ms p95 pooled HTTP driver',
+        dockerImage: 'data-neon-postgres:latest',
+        envVariables: { DATABASE_URL: 'postgres://app:secret@ep-cool-db.us-east-2.aws.neon.tech/neondb' },
         ports: ['5432:5432'],
-        alternatives: ['Supabase', 'PlanetScale', 'Neon'],
-        tags: ['sql', 'relational', 'history'],
-        position: { x: 740, y: 260 },
+        alternatives: ['Supabase Postgres', 'Cloud SQL'],
+        tags: ['postgres', 'serverless'],
+        position: { x: 740, y: 310 },
+      },
+      {
+        id: 'data-gcs',
+        name: 'Google Cloud Storage',
+        layer: 'data',
+        version: 'Standard',
+        category: 'Object Storage',
+        description: 'Document blob storage for parsed PDF papers, research artifacts, and user file attachments.',
+        status: 'healthy',
+        costEstimatePerMonth: 1,
+        latencyProfile: '35ms p95 object read',
+        dockerImage: 'gcs-storage:latest',
+        envVariables: { GCS_BUCKET: 'agent-research-artifacts', GCS_LOCATION: 'us-central1' },
+        ports: [],
+        alternatives: ['AWS S3', 'Cloudflare R2'],
+        tags: ['gcs', 'object-storage'],
+        position: { x: 740, y: 460 },
+      },
+      {
+        id: 'async-upstash',
+        name: 'Upstash Serverless Redis',
+        layer: 'async',
+        version: '7.2',
+        category: 'Message Broker & Cache',
+        description: 'Serverless Redis for Celery job queues, ephemeral streaming token buffers, and rate limiting.',
+        status: 'healthy',
+        costEstimatePerMonth: 3,
+        latencyProfile: '8ms p95 regional TLS',
+        dockerImage: 'async-upstash-redis:latest',
+        envVariables: { UPSTASH_REDIS_REST_URL: 'https://upstash.internal:6379' },
+        ports: ['6379:6379'],
+        alternatives: ['GCP Memorystore', 'Dragonfly DB'],
+        tags: ['redis', 'cache'],
+        position: { x: 960, y: 160 },
       },
       {
         id: 'async-celery',
-        name: 'Redis 7 + Celery Workers',
+        name: 'Celery Document Chunker',
         layer: 'async',
-        version: 'v5.3.6',
-        category: 'Async Document Pipeline',
-        description: 'Background ingestion, chunking, OCR document parsing, and batch embedding regeneration.',
+        version: '5.4',
+        category: 'Cloud Run Worker',
+        description: 'Async background worker downloading academic papers, OCR extraction, and batch embedding regeneration.',
         status: 'healthy',
-        costEstimatePerMonth: 15,
-        latencyProfile: '< 3ms queue',
-        dockerImage: 'python:3.11-slim',
-        envVariables: { CELERY_BROKER_URL: 'redis://cache-redis:6379/0' },
+        costEstimatePerMonth: 5,
+        latencyProfile: '1200ms per document chunk batch',
+        dockerImage: 'us-central1-docker.pkg.dev/chunker:latest',
+        envVariables: { CELERY_BROKER_URL: 'redis://upstash:6379/0', CHUNK_SIZE: '512' },
         ports: [],
-        alternatives: ['Temporal.io', 'BullMQ Node', 'AWS SQS'],
-        tags: ['background-queue', 'chunking', 'embeddings'],
-        position: { x: 960, y: 160 },
+        alternatives: ['BullMQ TypeScript Worker', 'Temporal.io'],
+        tags: ['celery', 'python'],
+        position: { x: 960, y: 310 },
+      },
+      {
+        id: 'infra-artifact',
+        name: 'GCP Artifact Registry & CI/CD',
+        layer: 'infra',
+        version: 'latest',
+        category: 'CI/CD & Observability',
+        description: 'Automated container builds, OpenTelemetry trace aggregation, and Cloud Run automated deployment mesh.',
+        status: 'healthy',
+        costEstimatePerMonth: 2,
+        latencyProfile: 'Async telemetry ingestion',
+        dockerImage: 'gcp-telemetry:latest',
+        envVariables: { OTEL_EXPORTER_OTLP_ENDPOINT: 'https://telemetry.internal:4318' },
+        ports: [],
+        alternatives: ['Datadog APM', 'GitHub Container Registry'],
+        tags: ['gcp', 'artifact-registry'],
+        position: { x: 960, y: 460 },
       },
     ];
 
     const connections: StackConnection[] = [
-      { id: 'c1', from: 'client-chat', to: 'edge-router', protocol: 'HTTPS / SSE', latency: '< 20ms' },
-      { id: 'c2', from: 'edge-router', to: 'compute-agent', protocol: 'HTTP/2 Streaming', latency: '< 3ms' },
-      { id: 'c3', from: 'compute-agent', to: 'db-qdrant', protocol: 'gRPC / HTTP', latency: '< 6ms' },
-      { id: 'c4', from: 'compute-agent', to: 'db-postgres', protocol: 'SQLAlchemy Pool', latency: '< 4ms' },
-      { id: 'c5', from: 'compute-agent', to: 'async-celery', protocol: 'Redis AMQP Protocol', latency: '< 2ms' },
+      { id: 'c1', from: 'client-nextjs', to: 'edge-cloudflare', protocol: 'HTTPS / SSE', latency: '< 15ms' },
+      { id: 'c2', from: 'edge-cloudflare', to: 'compute-agent', protocol: 'HTTP/2 Streaming', latency: '< 2ms' },
+      { id: 'c3', from: 'compute-agent', to: 'compute-gemini', protocol: 'Gemini REST / SSE', latency: '< 180ms' },
+      { id: 'c4', from: 'compute-agent', to: 'data-qdrant', protocol: 'gRPC / HNSW Search', latency: '< 18ms' },
+      { id: 'c5', from: 'compute-agent', to: 'data-neon', protocol: 'PostgreSQL Wire', latency: '< 25ms' },
+      { id: 'c6', from: 'compute-agent', to: 'data-gcs', protocol: 'GCS S3 API', latency: '< 35ms' },
+      { id: 'c7', from: 'compute-agent', to: 'async-upstash', protocol: 'RESP3 Redis Protocol', latency: '< 8ms' },
+      { id: 'c8', from: 'async-upstash', to: 'async-celery', protocol: 'Celery Broker Dispatch', latency: '< 5ms' },
+      { id: 'c9', from: 'async-celery', to: 'compute-gemini', protocol: 'Batch Embedding API', latency: '< 120ms' },
+      { id: 'c10', from: 'async-celery', to: 'data-qdrant', protocol: 'Vector Upsert Stream', latency: '< 20ms' },
+      { id: 'c11', from: 'async-celery', to: 'data-gcs', protocol: 'Blob Ingestion', latency: '< 30ms' },
+      { id: 'c12', from: 'compute-agent', to: 'infra-artifact', protocol: 'OTel OTLP Trace', latency: '< 1ms' },
+      { id: 'c13', from: 'async-celery', to: 'infra-artifact', protocol: 'OTel OTLP Metrics', latency: '< 1ms' },
+      { id: 'c14', from: 'edge-cloudflare', to: 'infra-artifact', protocol: 'WAF Access Logs', latency: '< 2ms' },
     ];
 
     const decisions: ArchitectureDecision[] = [
@@ -672,18 +780,18 @@ export function synthesizeDefaultBlueprint(
         title: 'Decouple Ingestion from Agent Query Runtime via Celery Workers',
         status: 'Accepted',
         context: 'Embedding PDF files and web scrapes involves heavy CPU and unpredictable memory spikes that must not degrade live chat SSE response streaming.',
-        decision: 'Offload ingestion and semantic chunking to Celery async queues with Redis broker.',
+        decision: 'Offload ingestion and semantic chunking to Celery async queues with Upstash Redis broker.',
         consequences: 'Protects user response latencies; allows scalable worker autoscaling based on queue depth.',
         alternativesConsidered: ['Synchronous FastAPI in-process background tasks', 'AWS Lambda trigger'],
       },
       {
         id: 'adr-02',
-        title: 'Dedicated Vector Engine (Qdrant) with Metadata Filtering',
+        title: 'Dedicated Vector Engine (Qdrant Cloud) with Metadata Filtering',
         status: 'Accepted',
         context: 'RAG search requires dynamic multi-tenant filtering (e.g. organization_id, doc_type) over millions of vector embeddings.',
         decision: 'Provision Qdrant for SIMD-accelerated cosine distance search with built-in payload indexes.',
-        consequences: 'Sub-10ms vector recall; avoids heavy index locking on the primary relational database.',
-        alternativesConsidered: ['pgvector', 'Pinecone Managed Cloud'],
+        consequences: 'Sub-18ms vector recall; avoids heavy index locking on the primary relational database.',
+        alternativesConsidered: ['pgvector on Neon', 'Pinecone Managed Cloud'],
       },
     ];
 
@@ -692,8 +800,8 @@ export function synthesizeDefaultBlueprint(
 
     return {
       id: 'stack-ai-rag-agent',
-      title: 'Agentic RAG Pipeline & Semantic Intelligence Mesh',
-      tagline: 'High-performance streaming agent with Qdrant vector store and async document parsing',
+      title: 'Autonomous AI Research Agent Blueprint',
+      tagline: 'Cost-optimized GCP Cloud Run TypeScript architecture pairing SSE-streamed Gemini reasoning with Celery document chunking and Qdrant vector memory.',
       ideaPrompt,
       constraints: finalConstraints,
       services,
@@ -702,7 +810,170 @@ export function synthesizeDefaultBlueprint(
       totalMonthlyCost: totalCost,
       compatibilityScore: report.score,
       validationStatus: report.isProductionReady ? 'Production Ready' : 'Review Recommended',
-      estimatedLatencyMs: 38,
+      estimatedLatencyMs: 210,
+    };
+  }
+
+  // Profile 4: Edge-First Global E-Commerce
+  if (
+    promptLower.includes('ecommerce') ||
+    promptLower.includes('e-commerce') ||
+    promptLower.includes('commerce') ||
+    promptLower.includes('d1') ||
+    promptLower.includes('store') ||
+    promptLower.includes('checkout')
+  ) {
+    const services: StackServiceNode[] = [
+      {
+        id: 'client-pages',
+        name: 'Cloudflare Pages + Astro 4',
+        layer: 'client',
+        version: 'v4.2.0',
+        category: 'Edge SSR Storefront',
+        description: 'Zero-JS static island catalog with client hydration for checkout cart and dynamic search.',
+        status: 'healthy',
+        costEstimatePerMonth: 0,
+        latencyProfile: '< 8ms TTFB edge',
+        dockerImage: 'cloudflare/pages:latest',
+        envVariables: { PUBLIC_API_URL: 'https://api.store.internal' },
+        ports: ['3000:3000'],
+        alternatives: ['Next.js 15 on Vercel', 'Remix Vite'],
+        tags: ['astro', 'edge-ssr', 'ecommerce'],
+        position: { x: 80, y: 160 },
+      },
+      {
+        id: 'edge-waf',
+        name: 'Cloudflare Workers WAF & Bot Management',
+        layer: 'edge',
+        version: 'v2024.2',
+        category: 'Edge Security Gateway',
+        description: 'Automated bot detection, inventory scalper rate limiting, and geo-routed currency conversion.',
+        status: 'healthy',
+        costEstimatePerMonth: 5,
+        latencyProfile: '< 4ms edge',
+        dockerImage: 'cloudflare/workers:latest',
+        envVariables: { BOT_MITIGATION_MODE: 'enforce', RATE_LIMIT_RPM: '400' },
+        ports: ['443:443'],
+        alternatives: ['Fastly Signal Sciences', 'AWS CloudFront WAF'],
+        tags: ['waf', 'security', 'bot-defense'],
+        position: { x: 300, y: 160 },
+      },
+      {
+        id: 'compute-checkout',
+        name: 'Cloudflare Workers Checkout API',
+        layer: 'compute',
+        version: 'v2.1.0',
+        category: 'Serverless Edge API',
+        description: 'V8 isolate microservices executing cart validation, Stripe Checkout Sessions, and order locking.',
+        status: 'healthy',
+        costEstimatePerMonth: 10,
+        latencyProfile: '< 12ms cold start',
+        dockerImage: 'cloudflare/workerd:latest',
+        envVariables: { STRIPE_KEY: 'env(SECRET)', D1_BINDING: 'DB_STORE' },
+        ports: ['8787:8787'],
+        alternatives: ['Go Fiber on Fly.io', 'AWS Lambda Node.js'],
+        tags: ['workers', 'v8-isolate', 'stripe'],
+        position: { x: 520, y: 160 },
+      },
+      {
+        id: 'data-d1',
+        name: 'Cloudflare D1 SQL Database',
+        layer: 'data',
+        version: 'v1.0.0',
+        category: 'Global Read-Replicated SQL',
+        description: 'Distributed SQLite database with automatic read replicas in 300+ edge locations for sub-10ms catalog reads.',
+        status: 'healthy',
+        costEstimatePerMonth: 5,
+        latencyProfile: '< 6ms read edge',
+        dockerImage: 'cloudflare/d1:latest',
+        envVariables: { D1_DATABASE_ID: 'd1_ecommerce_prod' },
+        ports: [],
+        alternatives: ['Turso libSQL', 'Neon Serverless Postgres'],
+        tags: ['d1', 'sqlite', 'edge-db'],
+        position: { x: 740, y: 160 },
+      },
+      {
+        id: 'async-queues',
+        name: 'Cloudflare Queues + Fraud Worker',
+        layer: 'async',
+        version: 'v1.0.0',
+        category: 'At-Least-Once Event Queue',
+        description: 'Asynchronous event stream processing inventory decrements, customer receipts, and fraud scoring.',
+        status: 'healthy',
+        costEstimatePerMonth: 5,
+        latencyProfile: '< 15ms queue batch',
+        dockerImage: 'cloudflare/queues:latest',
+        envVariables: { QUEUE_NAME: 'order-events' },
+        ports: [],
+        alternatives: ['AWS SQS', 'Upstash QStash'],
+        tags: ['queue', 'async', 'events'],
+        position: { x: 960, y: 160 },
+      },
+      {
+        id: 'infra-r2',
+        name: 'Cloudflare R2 Media & Product Assets',
+        layer: 'infra',
+        version: 'v4.0.0',
+        category: 'Zero-Egress Object Storage',
+        description: 'Optimized product image and catalog thumbnail storage with zero egress fees.',
+        status: 'healthy',
+        costEstimatePerMonth: 10,
+        latencyProfile: '< 15ms TTFB',
+        dockerImage: 'minio/minio:latest',
+        envVariables: { R2_BUCKET_NAME: 'store-product-images' },
+        ports: [],
+        alternatives: ['AWS S3 + CloudFront', 'Google Cloud Storage'],
+        tags: ['r2', 's3', 'media'],
+        position: { x: 960, y: 310 },
+      },
+    ];
+
+    const connections: StackConnection[] = [
+      { id: 'c1', from: 'client-pages', to: 'edge-waf', protocol: 'HTTPS / HTTP3', latency: '< 8ms' },
+      { id: 'c2', from: 'edge-waf', to: 'compute-checkout', protocol: 'Cloudflare Service Binding', latency: '< 1ms' },
+      { id: 'c3', from: 'compute-checkout', to: 'data-d1', protocol: 'D1 Native Binding', latency: '< 4ms' },
+      { id: 'c4', from: 'compute-checkout', to: 'async-queues', protocol: 'Queue Producer Binding', latency: '< 2ms' },
+      { id: 'c5', from: 'client-pages', to: 'infra-r2', protocol: 'Custom Domain CDN', latency: '< 15ms' },
+      { id: 'c6', from: 'async-queues', to: 'data-d1', protocol: 'D1 Write Transaction', latency: '< 8ms' },
+    ];
+
+    const decisions: ArchitectureDecision[] = [
+      {
+        id: 'adr-01',
+        title: 'Edge-First Distributed Architecture with Cloudflare D1',
+        status: 'Accepted',
+        context: 'Global e-commerce requires sub-20ms page load times worldwide to prevent cart abandonment without paying high multi-region DB costs.',
+        decision: 'Deploy storefront on Cloudflare Pages and state on Cloudflare D1 with automatic global read replication.',
+        consequences: 'Catalog reads achieve sub-10ms globally; writes are routed seamlessly to primary coordinator.',
+        alternativesConsidered: ['Centralized AWS RDS PostgreSQL in us-east-1', 'CockroachDB Dedicated'],
+      },
+      {
+        id: 'adr-02',
+        title: 'Asynchronous Order Processing via Cloudflare Queues',
+        status: 'Accepted',
+        context: 'Post-checkout operations (receipt email, inventory ERP sync, analytics) should not block the customer confirmation screen.',
+        decision: 'Enqueue order events to Cloudflare Queues for reliable background consumption.',
+        consequences: 'Guarantees order durability even during flash sales with traffic spikes.',
+        alternativesConsidered: ['Direct synchronous webhooks in checkout handler', 'Third-party Zapier'],
+      },
+    ];
+
+    const totalCost = calculateTotalCost(services);
+    const report = calculateCompatibilityScore(services, connections);
+
+    return {
+      id: 'stack-edge-ecommerce',
+      title: 'Edge-First Global E-Commerce Mesh',
+      tagline: 'Sub-10ms global edge SSR with Cloudflare D1 distributed database and asynchronous fraud detection',
+      ideaPrompt,
+      constraints: finalConstraints,
+      services,
+      connections,
+      decisions,
+      totalMonthlyCost: totalCost,
+      compatibilityScore: report.score,
+      validationStatus: report.isProductionReady ? 'Production Ready' : 'Review Recommended',
+      estimatedLatencyMs: 12,
     };
   }
 

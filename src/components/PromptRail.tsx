@@ -44,6 +44,16 @@ export const PromptRail: React.FC<PromptRailProps> = ({
   const [isConstraintsOpen, setIsConstraintsOpen] = useState(false);
   const [isMobileOpen, setIsMobileOpen] = useState(false);
 
+  // Sync internal state when blueprint changes externally
+  React.useEffect(() => {
+    setPromptText(blueprint.ideaPrompt);
+    setConstraints(blueprint.constraints);
+  }, [blueprint.ideaPrompt, blueprint.constraints]);
+
+  const activePresetIndex = PRESET_IDEAS.findIndex(
+    (p) => p.prompt.trim().toLowerCase() === blueprint.ideaPrompt.trim().toLowerCase()
+  );
+
   const handleSubmit = (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     if (!promptText.trim()) return;
@@ -66,12 +76,12 @@ export const PromptRail: React.FC<PromptRailProps> = ({
           onClick={() => setIsMobileOpen(!isMobileOpen)}
           className="flex items-center gap-2 text-left"
         >
-          <Terminal className="w-4 h-4 text-indigo-400" />
+          <span className="font-mono text-sm text-indigo-400 font-bold">&gt;_</span>
           <span className="font-semibold text-xs tracking-tight text-zinc-100 uppercase font-['Geist']">
             Architecture Synthesizer
           </span>
-          <span className="lg:hidden text-[11px] text-indigo-400 font-mono">
-            [{isMobileOpen ? 'Hide' : 'Show Panel'}]
+          <span className="lg:hidden text-[11px] text-indigo-400 font-mono ml-1">
+            [{isMobileOpen ? 'Hide Panel' : 'Show Panel'}]
           </span>
         </button>
         <button
@@ -89,7 +99,7 @@ export const PromptRail: React.FC<PromptRailProps> = ({
           <label htmlFor="idea-prompt-input" className="block text-xs font-medium text-zinc-300">
             Natural Language Project Idea
           </label>
-          <div className="relative rounded bg-[#060a12] border border-zinc-800/90 focus-within:border-indigo-500 focus-within:ring-1 focus-within:ring-indigo-500 transition-all">
+          <div className="relative rounded-lg bg-[#060a12] border border-zinc-800/90 focus-within:border-indigo-500 focus-within:ring-1 focus-within:ring-indigo-500 transition-all">
             <div className="absolute top-3 left-3 text-indigo-400 font-mono text-sm select-none pointer-events-none">
               &gt;
             </div>
@@ -106,7 +116,7 @@ export const PromptRail: React.FC<PromptRailProps> = ({
           <button
             type="submit"
             disabled={isSynthesizing || !promptText.trim()}
-            className="w-full py-2.5 px-4 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-xs font-medium rounded transition-all shadow-[0_0_16px_rgba(99,102,241,0.3)] border-t border-white/20 flex items-center justify-center gap-2"
+            className="w-full py-2.5 px-4 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-xs font-medium rounded-md transition-all shadow-[0_0_16px_rgba(99,102,241,0.3)] border-t border-white/20 flex items-center justify-center gap-2"
           >
             <Sparkles className={`w-3.5 h-3.5 ${isSynthesizing ? 'animate-spin' : ''}`} />
             <span>{isSynthesizing ? 'Generating Topology...' : 'Synthesize Stack Blueprint'}</span>
@@ -119,21 +129,30 @@ export const PromptRail: React.FC<PromptRailProps> = ({
             Architecture Presets
           </span>
           <div className="flex flex-col gap-1.5">
-            {PRESET_IDEAS.map((preset, idx) => (
-              <button
-                key={idx}
-                type="button"
-                onClick={() => handleSelectPreset(preset.prompt)}
-                className="text-left text-xs p-2 rounded bg-zinc-900/60 hover:bg-zinc-800/80 border border-zinc-800/80 text-zinc-300 hover:text-white transition-all hover:border-indigo-500/40"
-              >
-                <span className="font-medium text-zinc-200 block text-[12px]">{preset.label}</span>
-              </button>
-            ))}
+            {PRESET_IDEAS.map((preset, idx) => {
+              const isSelected = idx === activePresetIndex;
+              return (
+                <button
+                  key={idx}
+                  type="button"
+                  onClick={() => handleSelectPreset(preset.prompt)}
+                  className={`text-left text-xs p-3 rounded-lg border transition-all ${
+                    isSelected
+                      ? 'border-indigo-500/70 bg-[#161a2e]/60 shadow-[0_0_15px_rgba(99,102,241,0.15)] ring-1 ring-indigo-500/40 text-white'
+                      : 'bg-zinc-900/60 hover:bg-zinc-800/80 border-zinc-800/80 text-zinc-300 hover:text-white hover:border-zinc-700'
+                  }`}
+                >
+                  <span className={`block text-[12px] ${isSelected ? 'font-semibold text-white' : 'font-medium text-zinc-200'}`}>
+                    {preset.label}
+                  </span>
+                </button>
+              );
+            })}
           </div>
         </div>
 
         {/* Constraints Selector */}
-        <div className="border border-zinc-800/80 rounded bg-zinc-900/40 overflow-hidden">
+        <div className="border border-zinc-800/80 rounded-lg bg-zinc-900/40 overflow-hidden">
           <button
             type="button"
             onClick={() => setIsConstraintsOpen(!isConstraintsOpen)}
@@ -209,49 +228,49 @@ export const PromptRail: React.FC<PromptRailProps> = ({
         </div>
 
         {/* Live Architecture Status Card */}
-        <div className="p-3.5 rounded bg-zinc-900/70 border border-zinc-800/90 space-y-3">
+        <div className="p-3.5 rounded-lg bg-zinc-900/70 border border-zinc-800/90 space-y-3">
           <div className="flex items-center justify-between">
             <span className="text-[11px] font-medium text-zinc-400 uppercase tracking-wider">
               Stack Health & Cohesion
             </span>
             {/* Emerald validation chip with live heartbeat */}
-            <div className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 font-mono text-[11px]">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+            <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 font-mono text-[11px]">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse shadow-[0_0_6px_#10b981]" />
               <span>{blueprint.validationStatus}</span>
             </div>
           </div>
 
           <div className="grid grid-cols-2 gap-2 pt-1">
-            <div className="p-2 rounded bg-zinc-950/80 border border-zinc-800/60">
+            <div className="p-2.5 rounded-lg bg-zinc-950/80 border border-zinc-800/60">
               <span className="text-[10px] text-zinc-400 block">Est. Cloud Cost</span>
-              <span className="font-mono text-sm font-semibold text-zinc-100 tabular-nums">
+              <span className="font-mono text-sm font-bold text-zinc-100 tabular-nums">
                 ${blueprint.totalMonthlyCost}
-                <span className="text-[10px] text-zinc-500 font-normal">/mo</span>
               </span>
+              <span className="text-[10px] text-zinc-500 font-normal">/mo</span>
             </div>
 
-            <div className="p-2 rounded bg-zinc-950/80 border border-zinc-800/60">
+            <div className="p-2.5 rounded-lg bg-zinc-950/80 border border-zinc-800/60">
               <span className="text-[10px] text-zinc-400 block">Roundtrip Latency</span>
-              <span className="font-mono text-sm font-semibold text-cyan-400 tabular-nums">
+              <span className="font-mono text-sm font-bold text-[#38bdf8] tabular-nums">
                 {blueprint.estimatedLatencyMs}ms
-                <span className="text-[10px] text-zinc-500 font-normal"> p95</span>
               </span>
+              <span className="text-[10px] text-zinc-500 font-normal"> p95</span>
             </div>
 
-            <div className="p-2 rounded bg-zinc-950/80 border border-zinc-800/60">
+            <div className="p-2.5 rounded-lg bg-zinc-950/80 border border-zinc-800/60">
               <span className="text-[10px] text-zinc-400 block">Active Services</span>
-              <span className="font-mono text-sm font-semibold text-zinc-100 tabular-nums">
+              <span className="font-mono text-sm font-bold text-zinc-100 tabular-nums">
                 {blueprint.services.length}
-                <span className="text-[10px] text-zinc-500 font-normal"> nodes</span>
               </span>
+              <span className="text-[10px] text-zinc-500 font-normal"> nodes</span>
             </div>
 
-            <div className="p-2 rounded bg-zinc-950/80 border border-zinc-800/60">
+            <div className="p-2.5 rounded-lg bg-zinc-950/80 border border-zinc-800/60">
               <span className="text-[10px] text-zinc-400 block">Mesh Wires</span>
-              <span className="font-mono text-sm font-semibold text-zinc-100 tabular-nums">
+              <span className="font-mono text-sm font-bold text-zinc-100 tabular-nums">
                 {blueprint.connections.length}
-                <span className="text-[10px] text-zinc-500 font-normal"> links</span>
               </span>
+              <span className="text-[10px] text-zinc-500 font-normal"> links</span>
             </div>
           </div>
         </div>

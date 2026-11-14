@@ -154,7 +154,7 @@ export const DeployExportView: React.FC<DeployExportViewProps> = ({ blueprint })
                     : 'text-zinc-400 hover:text-zinc-200'
                 }`}
               >
-                <Terminal className="w-3 h-3 text-cyan-400" />
+                <span className="font-mono text-xs text-cyan-400">&gt;_</span>
                 <span>CLI Quickstart</span>
               </button>
 
