@@ -270,18 +270,6 @@ npm run build
 npm start
 ```
 
-### 5. Deploying to Vercel ▲
-
-IdeaToStack is pre-configured for instant zero-configuration deployment on Vercel:
-
-1. **Push your code to GitHub / GitLab / Bitbucket**.
-2. **Import the repository into [Vercel](https://vercel.com/)**.
-3. Vercel automatically detects the build settings via [`vercel.json`](vercel.json):
-   * **Framework**: Vite
-   * **Build Command**: `npm run build`
-   * **Output Directory**: `dist`
-4. *(Optional)* Add your `GEMINI_API_KEY` under **Project Settings → Environment Variables**.
-5. Click **Deploy**. Vercel serves the static frontend at the edge via its CDN and routes `/api/*` to the serverless function in [`api/index.ts`](api/index.ts).
 
 ---
 
