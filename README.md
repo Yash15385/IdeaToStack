@@ -2,7 +2,7 @@
 
 > **High-velocity developer infrastructure engine that turns natural language ideas into production-ready architecture blueprints, interactive topology graphs, and deployment stacks.**
 
-[![Tests](https://img.shields.io/badge/tests-6%2F6%20passing-10b981.svg)](#testing)
+[![Tests](https://img.shields.io/badge/tests-7%2F7%20passing-10b981.svg)](#testing)
 [![React](https://img.shields.io/badge/React-19.0.1-61dafb.svg)](https://react.dev/)
 [![Vite](https://img.shields.io/badge/Vite-8.3.8-646cff.svg)](https://vite.dev/)
 [![TailwindCSS](https://img.shields.io/badge/TailwindCSS-v4.3.3-38bdf8.svg)](https://tailwindcss.com/)
@@ -34,6 +34,9 @@
   * Visual lane guides: `Client / UI`, `Edge & Security`, `Compute & API`, `Data & Persistence`, and `Async & Queue`.
   * Cubic Bezier SVG wiring with protocol tags (`HTTPS / SSE`, `gRPC`, `RESP3`, `PostgreSQL Wire`, `S3 API`).
   * Live animated packet throughput pulses (`<animateMotion>`).
+  * **Interactive Block Dragging**: Click, hold, and drag any service block freely across the canvas. Dynamic SVG Bezier wires stretch, curve, and follow the blocks in real time. Includes an **Auto-Align** toolbar button to snap back to standard architectural columns.
+  * **Interactive Connection Flow Inspector**: Click any wire or protocol tag to open a detailed modal showing which source and target blocks are connected, data payload types (PCM audio, JSON tokens, SQL mutations, RESP3 keys, OTLP spans), encryption specs, and live sample wire payloads.
+  * **Mesh Fanout & Card Highlighting**: Hovering or clicking a connection wire dynamically highlights both connected blocks and displays multi-block broadcast branches.
   * Pan and zoom controls with auto-fit viewport reset.
 * **Instant Service Hot-Swapping**: Substitute any node with a compatible alternative (e.g. *Qdrant Cloud* $\rightarrow$ *pgvector on Neon*). The engine dynamically updates exposed ports, Docker images, environment variables, monthly costs, and network links.
 * **Service Catalog & Compatibility Matrix**:

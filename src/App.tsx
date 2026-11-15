@@ -82,8 +82,8 @@ export default function App() {
       if (data?.blueprint) {
         setBlueprint(data.blueprint);
         showToast(
-          data.source === 'gemini-4-hydrogen'
-            ? 'Architecture synthesized with Gemini AI'
+          data.source && data.source.startsWith('gemini')
+            ? `Architecture synthesized with Gemini AI (${data.source})`
             : 'Architecture topology generated'
         );
       }
@@ -135,6 +135,13 @@ export default function App() {
       decisions: [newDecision, ...blueprint.decisions],
     });
     showToast(`Recorded ADR: ${newDecision.title}`);
+  };
+
+  const handleUpdateNodePosition = (nodeId: string, position: { x: number; y: number }) => {
+    setBlueprint((prev) => ({
+      ...prev,
+      services: prev.services.map((s) => (s.id === nodeId ? { ...s, position } : s)),
+    }));
   };
 
   const handleReset = () => {
@@ -214,6 +221,7 @@ export default function App() {
               onSelectNode={(node) => setSelectedNode(node)}
               onAddNodeClick={() => setIsAddModalOpen(true)}
               theme={theme}
+              onUpdateNodePosition={handleUpdateNodePosition}
             />
           )}
 

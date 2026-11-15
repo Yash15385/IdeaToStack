@@ -12,6 +12,7 @@ import {
   generateEnvExample,
   swapService,
   synthesizeDefaultBlueprint,
+  getConnectionFlowDetails,
   StackServiceNode,
   StackConnection,
 } from './stackEngine';
@@ -125,4 +126,26 @@ test('swapService cleanly replaces target node and remaps connections', () => {
   // Connection pointing to database should be remapped to new ID
   const connToDb = updated.connections.find((c) => c.to === replacedDb.id);
   assert.ok(connToDb, 'Connection target should be updated to new service ID');
+});
+
+test('getConnectionFlowDetails correctly extracts data type, protocols, and multi-block fanout', () => {
+  const blueprint = synthesizeDefaultBlueprint('Real-time voice AI assistant');
+  const conn = blueprint.connections[0];
+  const fromNode = blueprint.services.find((s) => s.id === conn.from);
+  const toNode = blueprint.services.find((s) => s.id === conn.to);
+
+  const flow = getConnectionFlowDetails(
+    conn,
+    fromNode,
+    toNode,
+    blueprint.services,
+    blueprint.connections
+  );
+
+  assert.ok(flow.flowName, 'Flow name should be generated');
+  assert.ok(flow.dataType, 'Data type should be specified');
+  assert.ok(flow.flowPattern, 'Flow pattern should be defined');
+  assert.ok(flow.security, 'Security protocol should be specified');
+  assert.ok(flow.samplePayload, 'Sample wire payload should be present');
+  assert.ok(Array.isArray(flow.fanOutNodes), 'Fanout nodes array should be defined');
 });

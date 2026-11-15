@@ -34,6 +34,19 @@ export interface StackConnection {
   protocol: string;
   latency: string;
   description?: string;
+  dataType?: string;
+}
+
+export interface ConnectionFlowDetails {
+  flowName: string;
+  dataType: string;
+  flowPattern: string;
+  security: string;
+  latency: string;
+  throughput: string;
+  samplePayload: string;
+  direction: 'unidirectional' | 'bidirectional';
+  fanOutNodes: { id: string; name: string; layer: ServiceLayer; protocol: string }[];
 }
 
 export interface ArchitectureDecision {
@@ -392,6 +405,341 @@ export function swapService(
     totalMonthlyCost,
     compatibilityScore: report.score,
     validationStatus: report.isProductionReady ? 'Production Ready' : 'Review Recommended',
+  };
+}
+
+/**
+ * Derives comprehensive data flow details, payload types, security protocols,
+ * and multi-block fanout information for an architectural connection.
+ */
+export function getConnectionFlowDetails(
+  conn: StackConnection,
+  fromNode?: StackServiceNode,
+  toNode?: StackServiceNode,
+  allServices?: StackServiceNode[],
+  allConnections?: StackConnection[]
+): ConnectionFlowDetails {
+  const fromName = fromNode?.name.toLowerCase() || '';
+  const toName = toNode?.name.toLowerCase() || '';
+  const fromCategory = fromNode?.category.toLowerCase() || '';
+  const toCategory = toNode?.category.toLowerCase() || '';
+  const proto = conn.protocol.toLowerCase();
+
+  // Find all sibling destinations this source node fans out to
+  const siblingConnections = (allConnections || []).filter((c) => c.from === conn.from);
+  const fanOutNodes = siblingConnections.map((c) => {
+    const targetService = (allServices || []).find((s) => s.id === c.to);
+    return {
+      id: c.to,
+      name: targetService?.name || c.to,
+      layer: targetService?.layer || 'compute',
+      protocol: c.protocol,
+    };
+  });
+
+  // 1. LLM / AI Reasoning Pipelines (e.g. Gemini, OpenAI, Claude, Local LLMs)
+  if (
+    toName.includes('llm') ||
+    toName.includes('gemini') ||
+    toName.includes('openai') ||
+    toName.includes('anthropic') ||
+    toCategory.includes('llm') ||
+    toCategory.includes('ai')
+  ) {
+    return {
+      flowName: `${fromNode?.name || 'Orchestrator'} ➔ ${toNode?.name || 'LLM Engine'} Streaming Inference`,
+      dataType: 'Token Stream / JSON-RPC (Server-Sent Events / Chunked HTTP)',
+      flowPattern: 'Bidirectional Streaming / Dynamic Token Generation',
+      security: 'TLS 1.3 with Secret API Key / IAM Workload Identity',
+      latency: conn.latency || '< 25ms TTFT (Time to First Token)',
+      throughput: 'Real-time SSE token frames (~40-90 tokens/sec)',
+      samplePayload: JSON.stringify(
+        {
+          model: toNode?.name || 'gemini-2.0-flash',
+          messages: [
+            { role: 'system', content: 'You are an intelligent real-time conversational agent.' },
+            { role: 'user', content: 'Process transcribed speech input and generate next turn.' },
+          ],
+          stream: true,
+          temperature: 0.7,
+        },
+        null,
+        2
+      ),
+      direction: 'bidirectional',
+      fanOutNodes,
+    };
+  }
+
+  // 2. Speech-to-Text / Audio Streaming (e.g. Nova-2, Deepgram, Whisper)
+  if (
+    toName.includes('speech') ||
+    toName.includes('stt') ||
+    toName.includes('deepgram') ||
+    toName.includes('nova') ||
+    toName.includes('whisper') ||
+    fromName.includes('speech') ||
+    proto.includes('websocket')
+  ) {
+    if (
+      toName.includes('speech') ||
+      toName.includes('stt') ||
+      toName.includes('nova') ||
+      toName.includes('deepgram')
+    ) {
+      return {
+        flowName: `${fromNode?.name || 'Audio Orchestrator'} ➔ ${toNode?.name || 'Speech Engine'} Live Audio Stream`,
+        dataType: 'Raw PCM 16kHz Binary Audio & Word-Level Timestamp Transcripts',
+        flowPattern: 'Full-Duplex Low-Latency WebSocket (WSS) Channel',
+        security: 'WSS (WebSocket Secure) with Ephemeral Client Handshake Token',
+        latency: conn.latency || '< 120ms p95 transcription delay',
+        throughput: 'Continuous 16kHz 16-bit Linear PCM Audio (~256 kbps)',
+        samplePayload: JSON.stringify(
+          {
+            type: 'audio_stream',
+            encoding: 'linear16',
+            sample_rate: 16000,
+            channels: 1,
+            interim_results: true,
+            chunk_size_bytes: 4096,
+            metadata: { session_id: 'sess_live_9481', language: 'en-US' },
+          },
+          null,
+          2
+        ),
+        direction: 'bidirectional',
+        fanOutNodes,
+      };
+    }
+  }
+
+  // 3. Cache / Key-Value In-Memory (Redis, Memcached, Upstash, KeyDB)
+  if (
+    toName.includes('redis') ||
+    toName.includes('cache') ||
+    toName.includes('upstash') ||
+    toCategory.includes('cache') ||
+    proto.includes('resp')
+  ) {
+    return {
+      flowName: `${fromNode?.name || 'Compute'} ➔ ${toNode?.name || 'In-Memory Cache'} Session Pipeline`,
+      dataType: 'RESP3 Serialized In-Memory Keys, Hashes, Expire TTLs & Pub/Sub Signals',
+      flowPattern: 'Pipelined TCP / Sub-Millisecond In-Memory Read & Write',
+      security: 'TLS with Redis AUTH Token / VPC Private Peering',
+      latency: conn.latency || '< 1ms p95 latency',
+      throughput: 'High-Throughput IOPS (10k+ ops/sec with connection pooling)',
+      samplePayload: `# RESP3 In-Memory Session & Turn State Pipeline\nHSET session:usr_98a active 1 current_turn 4 last_seen 1794759090\nEXPIRE session:usr_98a 86400\nPUBLISH room:canvas:98 "{\\"type\\":\\"state_sync\\",\\"version\\":4}"`,
+      direction: 'bidirectional',
+      fanOutNodes,
+    };
+  }
+
+  // 4. Databases & Document Stores (PostgreSQL, Firestore, MongoDB, MySQL, Neon)
+  if (
+    toName.includes('postgres') ||
+    toName.includes('firestore') ||
+    toName.includes('mongo') ||
+    toName.includes('db') ||
+    toName.includes('neon') ||
+    toName.includes('database') ||
+    toCategory.includes('database') ||
+    toCategory.includes('persistence') ||
+    proto.includes('sql') ||
+    proto.includes('pgwire')
+  ) {
+    return {
+      flowName: `${fromNode?.name || 'Compute'} ➔ ${toNode?.name || 'Database Store'} ACID Persistence`,
+      dataType: 'Parameterized Queries, ACID Transactions & Document JSON Entities',
+      flowPattern: 'Connection-Pooled Relational / Document Persistence',
+      security: 'Encrypted TLS with IAM Service Account & Row-Level Security',
+      latency: conn.latency || '< 5ms p95 query execution',
+      throughput: 'Batched Multi-Row Writes & Indexed Point Lookups',
+      samplePayload: JSON.stringify(
+        {
+          collection: 'transcripts_and_turns',
+          document_id: 'doc_turn_10481',
+          data: {
+            session_id: 'sess_live_9481',
+            timestamp: new Date().toISOString(),
+            speaker: 'user',
+            transcript: 'Connect the streaming speech-to-text pipeline to the persistent transcript storage.',
+            confidence: 0.982,
+            latency_ms: 18,
+          },
+          write_concern: 'journaled',
+        },
+        null,
+        2
+      ),
+      direction: 'bidirectional',
+      fanOutNodes,
+    };
+  }
+
+  // 5. Tracing / Monitoring / Telemetry (OpenTelemetry, Datadog, Prometheus, Cloud Monitoring)
+  if (
+    toName.includes('telemetry') ||
+    toName.includes('trace') ||
+    toName.includes('monitor') ||
+    toName.includes('opentelemetry') ||
+    toCategory.includes('observability') ||
+    proto.includes('otlp')
+  ) {
+    return {
+      flowName: `${fromNode?.name || 'Services'} ➔ ${toNode?.name || 'Observability Collector'} Telemetry Ingestion`,
+      dataType: 'OpenTelemetry (OTLP) Tracing Spans, Metric Gauges & Trace Context',
+      flowPattern: 'Asynchronous Non-Blocking UDP / gRPC Stream',
+      security: 'mTLS Internal Mesh with VPC Access Control',
+      latency: conn.latency || '< 2ms non-blocking async flush',
+      throughput: 'Batched Span Export (500 spans / buffer interval)',
+      samplePayload: JSON.stringify(
+        {
+          resourceSpans: [
+            {
+              resource: { service_name: fromNode?.name || 'stream-orchestrator' },
+              scopeSpans: [
+                {
+                  name: 'process_audio_frame',
+                  traceId: '4bf92f3577b34da6a3ce929d0e0e4736',
+                  spanId: '00f067aa0ba902b7',
+                  durationMs: 4.8,
+                  attributes: {
+                    'rpc.method': 'StreamTranscribe',
+                    'net.peer.name': toNode?.name || 'telemetry-collector',
+                    'http.status_code': 200,
+                  },
+                },
+              ],
+            },
+          ],
+        },
+        null,
+        2
+      ),
+      direction: 'unidirectional',
+      fanOutNodes,
+    };
+  }
+
+  // 6. Vector Search & Similarity Memory (Qdrant, Pinecone, pgvector, Weaviate)
+  if (
+    toName.includes('qdrant') ||
+    toName.includes('vector') ||
+    toName.includes('pinecone') ||
+    toName.includes('weaviate') ||
+    toCategory.includes('vector')
+  ) {
+    return {
+      flowName: `${fromNode?.name || 'Compute'} ➔ ${toNode?.name || 'Vector Engine'} Similarity Search`,
+      dataType: 'Float32 Embedding Vectors (768/1536 dim) & Cosine Distance Queries',
+      flowPattern: 'gRPC / HTTP/2 High-Dimension Vector Lookup',
+      security: 'TLS 1.3 with API Key Header Authentication',
+      latency: conn.latency || '< 12ms p95 ANN search',
+      throughput: 'HNSW Index Traversals & Top-K Nearest Neighbor Scans',
+      samplePayload: JSON.stringify(
+        {
+          collection: 'knowledge_embeddings',
+          vector: [0.0142, -0.0481, 0.1293, '... (1536 dims)'],
+          top_k: 5,
+          score_threshold: 0.82,
+          filter: { status: 'published' },
+        },
+        null,
+        2
+      ),
+      direction: 'bidirectional',
+      fanOutNodes,
+    };
+  }
+
+  // 7. Message Queue / Durable Workflow (RabbitMQ, Kafka, SQS, Temporal, Celery)
+  if (
+    toName.includes('queue') ||
+    toName.includes('temporal') ||
+    toName.includes('kafka') ||
+    toName.includes('celery') ||
+    toName.includes('rabbit') ||
+    toCategory.includes('queue') ||
+    toCategory.includes('async')
+  ) {
+    return {
+      flowName: `${fromNode?.name || 'Producer'} ➔ ${toNode?.name || 'Queue / Workflow'} Event Bus`,
+      dataType: 'Serialized CloudEvents / JSON Job Envelopes & Ack Tokens',
+      flowPattern: 'Asynchronous Push-Pull with Idempotent Deduplication',
+      security: 'Encrypted Message Broker with SASL/SCRAM or IAM Role',
+      latency: conn.latency || '< 5ms publish latency',
+      throughput: 'Durable Queue Buffering (At-least-once delivery guarantee)',
+      samplePayload: JSON.stringify(
+        {
+          eventId: 'evt_job_542890',
+          topic: 'media.transcription.completed',
+          timestamp: new Date().toISOString(),
+          idempotencyKey: 'idem_90481_v1',
+          payload: {
+            session_id: 'sess_live_9481',
+            status: 'READY_FOR_SUMMARY',
+            audio_duration_seconds: 48.2,
+          },
+        },
+        null,
+        2
+      ),
+      direction: 'unidirectional',
+      fanOutNodes,
+    };
+  }
+
+  // 8. Client to Edge / Gateway
+  if (fromNode?.layer === 'client' || toNode?.layer === 'edge') {
+    return {
+      flowName: `${fromNode?.name || 'Client Application'} ➔ ${toNode?.name || 'Edge Gateway'} Ingress Tunnel`,
+      dataType: 'HTTPS / WSS Ingress Requests, Static Bundles & Auth Handshakes',
+      flowPattern: 'TLS Termination, Edge Caching & Anycast Routing',
+      security: 'TLS 1.3 / Automated ACME Certificate / Cloudflare DDoS Shield',
+      latency: conn.latency || '< 15ms global edge termination',
+      throughput: 'Anycast Distributed Edge Bandwidth',
+      samplePayload: JSON.stringify(
+        {
+          method: 'GET',
+          path: '/api/v1/session/live',
+          headers: {
+            'Host': 'voice.app.internal',
+            'Upgrade': 'websocket',
+            'Connection': 'Upgrade',
+            'Sec-WebSocket-Version': '13',
+            'Authorization': 'Bearer eyJhbGciOiJIUzI1Ni...',
+          },
+        },
+        null,
+        2
+      ),
+      direction: 'bidirectional',
+      fanOutNodes,
+    };
+  }
+
+  // Default / Generic Microservice Connection
+  return {
+    flowName: `${fromNode?.name || 'Origin Service'} ➔ ${toNode?.name || 'Target Service'} Mesh Flow`,
+    dataType: 'Encrypted JSON / Binary Microservice Request-Response',
+    flowPattern: 'Synchronous Request-Response / HTTP REST or Internal gRPC',
+    security: 'TLS 1.3 / Internal VPC Network Isolation',
+    latency: conn.latency || '< 10ms internal hop',
+    throughput: 'Internal Cluster Mesh Throughput',
+    samplePayload: JSON.stringify(
+      {
+        source: fromNode?.name || 'origin-node',
+        target: toNode?.name || 'target-node',
+        protocol: conn.protocol,
+        action: 'dispatch_payload',
+        timestamp: new Date().toISOString(),
+        payload: { status: 'healthy', context_routed: true },
+      },
+      null,
+      2
+    ),
+    direction: 'bidirectional',
+    fanOutNodes,
   };
 }
 

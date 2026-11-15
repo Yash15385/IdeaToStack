@@ -18,8 +18,11 @@ import {
   ArrowRight,
   ShieldCheck,
   CheckCircle2,
+  RotateCcw,
+  GripHorizontal,
 } from 'lucide-react';
 import { StackBlueprint, StackServiceNode, StackConnection } from '../utils/stackEngine';
+import { ConnectionFlowModal } from './ConnectionFlowModal';
 
 interface TopologyCanvasProps {
   blueprint: StackBlueprint;
@@ -27,6 +30,7 @@ interface TopologyCanvasProps {
   onSelectNode: (node: StackServiceNode) => void;
   onAddNodeClick: () => void;
   theme?: 'dark' | 'light' | 'red';
+  onUpdateNodePosition?: (nodeId: string, position: { x: number; y: number }) => void;
 }
 
 const LAYER_LABELS: Record<string, { label: string; x: number }> = {
@@ -62,11 +66,40 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
   onSelectNode,
   onAddNodeClick,
   theme = 'dark',
+  onUpdateNodePosition,
 }) => {
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [isPanning, setIsPanning] = useState(false);
   const [startPan, setStartPan] = useState({ x: 0, y: 0 });
+  const [selectedConn, setSelectedConn] = useState<StackConnection | null>(null);
+  const [hoveredConnId, setHoveredConnId] = useState<string | null>(null);
+
+  // Sync refs so non-passive native wheel and touch listeners have access to current values
+  const zoomRef = useRef(zoom);
+  zoomRef.current = zoom;
+  const panRef = useRef(pan);
+  panRef.current = pan;
+
+  // Local state for dynamically dragged node positions
+  const [nodePositions, setNodePositions] = useState<Record<string, { x: number; y: number }>>(() => {
+    const initialPos: Record<string, { x: number; y: number }> = {};
+    blueprint.services.forEach((s) => {
+      initialPos[s.id] = { x: s.position.x, y: s.position.y };
+    });
+    return initialPos;
+  });
+
+  const [draggingNodeId, setDraggingNodeId] = useState<string | null>(null);
+
+  const dragRef = useRef<{
+    nodeId: string;
+    startMouseX: number;
+    startMouseY: number;
+    startNodeX: number;
+    startNodeY: number;
+    hasMoved: boolean;
+  } | null>(null);
 
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -76,6 +109,205 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
     setPan({ x: 20, y: 10 });
   }, [blueprint.id]);
 
+  // Sync positions when blueprint changes externally (e.g. new synthesis or reset)
+  useEffect(() => {
+    const updatedPos: Record<string, { x: number; y: number }> = {};
+    blueprint.services.forEach((s) => {
+      updatedPos[s.id] = { x: s.position.x, y: s.position.y };
+    });
+    setNodePositions(updatedPos);
+  }, [blueprint.id, blueprint.services.length]);
+
+  // Mouse Wheel & Trackpad Pinch-to-Zoom (Cursor Centered)
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    const handleWheel = (e: WheelEvent) => {
+      // Prevent standard browser page scrolling / global browser zoom
+      e.preventDefault();
+
+      const rect = container.getBoundingClientRect();
+      const cursorX = e.clientX - rect.left;
+      const cursorY = e.clientY - rect.top;
+
+      const currentZoom = zoomRef.current;
+      const currentPan = panRef.current;
+
+      // Coordinate in the canvas world before zoom
+      const worldX = (cursorX - currentPan.x) / currentZoom;
+      const worldY = (cursorY - currentPan.y) / currentZoom;
+
+      // Trackpad pinch (e.ctrlKey) or mouse wheel scroll
+      let zoomDelta = 0;
+      if (e.ctrlKey) {
+        // Trackpad pinch-to-zoom gives smaller deltas
+        zoomDelta = -e.deltaY * 0.015;
+      } else {
+        // Mouse wheel scroll: proportional smooth step
+        const step = Math.min(Math.max(-e.deltaY * 0.0018, -0.2), 0.2);
+        zoomDelta = step;
+      }
+
+      const newZoom = Math.min(Math.max(currentZoom + zoomDelta, 0.4), 2.4);
+      if (Math.abs(newZoom - currentZoom) < 0.001) return;
+
+      // Keep world coordinates under cursor stationary (Zoom towards cursor)
+      const newPanX = cursorX - worldX * newZoom;
+      const newPanY = cursorY - worldY * newZoom;
+
+      setZoom(newZoom);
+      setPan({ x: newPanX, y: newPanY });
+    };
+
+    container.addEventListener('wheel', handleWheel, { passive: false });
+    return () => container.removeEventListener('wheel', handleWheel);
+  }, []);
+
+  // Two-Finger Touch Screen Pinch-to-Zoom and Pan
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    let touchStartDist = 0;
+    let touchStartZoom = 1;
+    let touchStartPan = { x: 0, y: 0 };
+    let touchStartMid = { x: 0, y: 0 };
+    let isTouchPinching = false;
+
+    // Single finger canvas panning
+    let singleTouchStart = { x: 0, y: 0 };
+    let singlePanStart = { x: 0, y: 0 };
+    let isSingleTouching = false;
+
+    const handleTouchStart = (e: TouchEvent) => {
+      const rect = container.getBoundingClientRect();
+
+      if (e.touches.length === 2) {
+        isTouchPinching = true;
+        isSingleTouching = false;
+        const t1 = e.touches[0];
+        const t2 = e.touches[1];
+
+        touchStartDist = Math.hypot(t1.clientX - t2.clientX, t1.clientY - t2.clientY);
+        touchStartZoom = zoomRef.current;
+        touchStartPan = { ...panRef.current };
+        touchStartMid = {
+          x: (t1.clientX + t2.clientX) / 2 - rect.left,
+          y: (t1.clientY + t2.clientY) / 2 - rect.top,
+        };
+      } else if (e.touches.length === 1) {
+        // Single finger panning if touching canvas background
+        if (!(e.target as HTMLElement).closest('.node-card')) {
+          isSingleTouching = true;
+          isTouchPinching = false;
+          singleTouchStart = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+          singlePanStart = { ...panRef.current };
+        }
+      }
+    };
+
+    const handleTouchMove = (e: TouchEvent) => {
+      const rect = container.getBoundingClientRect();
+
+      // 1. Two-finger pinch-to-zoom & two-finger pan
+      if (e.touches.length === 2 && isTouchPinching) {
+        e.preventDefault();
+        const t1 = e.touches[0];
+        const t2 = e.touches[1];
+
+        const currentDist = Math.hypot(t1.clientX - t2.clientX, t1.clientY - t2.clientY);
+        if (touchStartDist === 0) return;
+
+        const scale = currentDist / touchStartDist;
+        const newZoom = Math.min(Math.max(touchStartZoom * scale, 0.4), 2.4);
+
+        const currentMidX = (t1.clientX + t2.clientX) / 2 - rect.left;
+        const currentMidY = (t1.clientY + t2.clientY) / 2 - rect.top;
+
+        // Origin in world coordinates at pinch start
+        const worldX = (touchStartMid.x - touchStartPan.x) / touchStartZoom;
+        const worldY = (touchStartMid.y - touchStartPan.y) / touchStartZoom;
+
+        const newPanX = currentMidX - worldX * newZoom;
+        const newPanY = currentMidY - worldY * newZoom;
+
+        setZoom(newZoom);
+        setPan({ x: newPanX, y: newPanY });
+        return;
+      }
+
+      // 2. Dragging a node card on touch devices
+      if (dragRef.current && e.touches.length === 1) {
+        e.preventDefault();
+        const t = e.touches[0];
+        const dx = (t.clientX - dragRef.current.startMouseX) / zoomRef.current;
+        const dy = (t.clientY - dragRef.current.startMouseY) / zoomRef.current;
+
+        if (!dragRef.current.hasMoved && Math.hypot(dx, dy) > 3) {
+          dragRef.current.hasMoved = true;
+        }
+
+        if (dragRef.current.hasMoved) {
+          const newX = Math.round(dragRef.current.startNodeX + dx);
+          const newY = Math.round(dragRef.current.startNodeY + dy);
+
+          setNodePositions((prev) => ({
+            ...prev,
+            [dragRef.current!.nodeId]: { x: newX, y: newY },
+          }));
+        }
+        return;
+      }
+
+      // 3. Single finger canvas background panning
+      if (e.touches.length === 1 && isSingleTouching) {
+        e.preventDefault();
+        const dx = e.touches[0].clientX - singleTouchStart.x;
+        const dy = e.touches[0].clientY - singleTouchStart.y;
+        setPan({ x: singlePanStart.x + dx, y: singlePanStart.y + dy });
+      }
+    };
+
+    const handleTouchEnd = (e: TouchEvent) => {
+      if (e.touches.length < 2) {
+        isTouchPinching = false;
+      }
+      if (e.touches.length === 0) {
+        isSingleTouching = false;
+      }
+
+      // If finished dragging a node via touch
+      if (dragRef.current && e.touches.length === 0) {
+        const wasMoved = dragRef.current.hasMoved;
+        const movedNodeId = dragRef.current.nodeId;
+        const finalPos = nodePositions[movedNodeId];
+
+        dragRef.current = null;
+        setDraggingNodeId(null);
+
+        if (wasMoved && finalPos && onUpdateNodePosition) {
+          onUpdateNodePosition(movedNodeId, finalPos);
+        } else if (!wasMoved) {
+          const service = blueprint.services.find((s) => s.id === movedNodeId);
+          if (service) onSelectNode(service);
+        }
+      }
+    };
+
+    container.addEventListener('touchstart', handleTouchStart, { passive: false });
+    container.addEventListener('touchmove', handleTouchMove, { passive: false });
+    container.addEventListener('touchend', handleTouchEnd, { passive: true });
+    container.addEventListener('touchcancel', handleTouchEnd, { passive: true });
+
+    return () => {
+      container.removeEventListener('touchstart', handleTouchStart);
+      container.removeEventListener('touchmove', handleTouchMove);
+      container.removeEventListener('touchend', handleTouchEnd);
+      container.removeEventListener('touchcancel', handleTouchEnd);
+    };
+  }, [nodePositions, onUpdateNodePosition]);
+
   const handleMouseDown = (e: React.MouseEvent) => {
     // Only pan if clicking canvas background directly
     if ((e.target as HTMLElement).closest('.node-card')) return;
@@ -83,23 +315,138 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
     setStartPan({ x: e.clientX - pan.x, y: e.clientY - pan.y });
   };
 
+  const handleNodeMouseDown = (e: React.MouseEvent, serviceId: string) => {
+    // Only initiate drag on primary (left) mouse button
+    if (e.button !== 0) return;
+    e.stopPropagation();
+
+    const currentPos =
+      nodePositions[serviceId] ||
+      blueprint.services.find((s) => s.id === serviceId)?.position || { x: 0, y: 0 };
+
+    dragRef.current = {
+      nodeId: serviceId,
+      startMouseX: e.clientX,
+      startMouseY: e.clientY,
+      startNodeX: currentPos.x,
+      startNodeY: currentPos.y,
+      hasMoved: false,
+    };
+    setDraggingNodeId(serviceId);
+  };
+
+  const handleNodeTouchStart = (e: React.TouchEvent, serviceId: string) => {
+    // Only drag with single touch (two touches is reserved for pinch-to-zoom)
+    if (e.touches.length !== 1) return;
+    e.stopPropagation();
+
+    const currentPos =
+      nodePositions[serviceId] ||
+      blueprint.services.find((s) => s.id === serviceId)?.position || { x: 0, y: 0 };
+
+    dragRef.current = {
+      nodeId: serviceId,
+      startMouseX: e.touches[0].clientX,
+      startMouseY: e.touches[0].clientY,
+      startNodeX: currentPos.x,
+      startNodeY: currentPos.y,
+      hasMoved: false,
+    };
+    setDraggingNodeId(serviceId);
+  };
+
   const handleMouseMove = (e: React.MouseEvent) => {
-    if (!isPanning) return;
-    setPan({ x: e.clientX - startPan.x, y: e.clientY - startPan.y });
+    // 1. If currently dragging a service block
+    if (dragRef.current) {
+      const dx = (e.clientX - dragRef.current.startMouseX) / zoom;
+      const dy = (e.clientY - dragRef.current.startMouseY) / zoom;
+
+      if (!dragRef.current.hasMoved && Math.hypot(dx, dy) > 3) {
+        dragRef.current.hasMoved = true;
+      }
+
+      if (dragRef.current.hasMoved) {
+        const newX = Math.round(dragRef.current.startNodeX + dx);
+        const newY = Math.round(dragRef.current.startNodeY + dy);
+
+        setNodePositions((prev) => ({
+          ...prev,
+          [dragRef.current!.nodeId]: { x: newX, y: newY },
+        }));
+      }
+      return;
+    }
+
+    // 2. If currently panning the canvas background
+    if (isPanning) {
+      setPan({ x: e.clientX - startPan.x, y: e.clientY - startPan.y });
+    }
   };
 
   const handleMouseUp = () => {
+    if (dragRef.current) {
+      const wasMoved = dragRef.current.hasMoved;
+      const movedNodeId = dragRef.current.nodeId;
+      const finalPos = nodePositions[movedNodeId];
+
+      dragRef.current = null;
+      setDraggingNodeId(null);
+
+      if (wasMoved && finalPos && onUpdateNodePosition) {
+        onUpdateNodePosition(movedNodeId, finalPos);
+      } else if (!wasMoved) {
+        // If the user clicked without dragging, select the node to open inspector
+        const service = blueprint.services.find((s) => s.id === movedNodeId);
+        if (service) onSelectNode(service);
+      }
+      return;
+    }
+
     setIsPanning(false);
+  };
+
+  // Ensure dragging cleanly ends if user releases mouse outside canvas
+  useEffect(() => {
+    const handleGlobalMouseUp = () => {
+      if (dragRef.current) {
+        const wasMoved = dragRef.current.hasMoved;
+        const movedNodeId = dragRef.current.nodeId;
+        const finalPos = nodePositions[movedNodeId];
+
+        dragRef.current = null;
+        setDraggingNodeId(null);
+
+        if (wasMoved && finalPos && onUpdateNodePosition) {
+          onUpdateNodePosition(movedNodeId, finalPos);
+        }
+      }
+      setIsPanning(false);
+    };
+
+    window.addEventListener('mouseup', handleGlobalMouseUp);
+    return () => window.removeEventListener('mouseup', handleGlobalMouseUp);
+  }, [nodePositions, onUpdateNodePosition]);
+
+  const handleResetPositions = () => {
+    const defaultPos: Record<string, { x: number; y: number }> = {};
+    blueprint.services.forEach((s) => {
+      defaultPos[s.id] = { x: s.position.x, y: s.position.y };
+      if (onUpdateNodePosition) {
+        onUpdateNodePosition(s.id, { x: s.position.x, y: s.position.y });
+      }
+    });
+    setNodePositions(defaultPos);
   };
 
   // Node dimension constants for wiring anchor calculations
   const CARD_WIDTH = 200;
   const CARD_HEIGHT = 120;
 
-  // Build service coordinate map
+  // Build service coordinate map from current nodePositions so wires dynamically follow moving blocks
   const serviceCoordMap = new Map<string, { x: number; y: number }>();
   blueprint.services.forEach((s) => {
-    serviceCoordMap.set(s.id, { x: s.position.x, y: s.position.y });
+    const pos = nodePositions[s.id] || s.position;
+    serviceCoordMap.set(s.id, { x: pos.x, y: pos.y });
   });
 
   // Theme-aware wire & pulse color schemes
@@ -110,8 +457,10 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
           stop2: '#fb923c',
           stop3: '#e11d48',
           glow: '#e11d48',
+          glowHover: '#fb7185',
           ambient: '#3a0812',
           pulse: '#fb7185',
+          highlight: '#f43f5e',
         }
       : theme === 'light'
       ? {
@@ -119,16 +468,20 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
           stop2: '#0284c7',
           stop3: '#059669',
           glow: '#4f46e5',
+          glowHover: '#4338ca',
           ambient: '#cbd5e1',
           pulse: '#0284c7',
+          highlight: '#4f46e5',
         }
       : {
           stop1: '#6366f1',
           stop2: '#38bdf8',
           stop3: '#10b981',
           glow: '#6366f1',
+          glowHover: '#818cf8',
           ambient: '#1e2230',
           pulse: '#38bdf8',
+          highlight: '#6366f1',
         };
 
   return (
@@ -137,7 +490,9 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
       onMouseDown={handleMouseDown}
       onMouseMove={handleMouseMove}
       onMouseUp={handleMouseUp}
-      className="relative flex-1 h-[calc(100vh-4rem)] bg-[#030712] overflow-hidden select-none cursor-grab active:cursor-grabbing bg-dot-grid"
+      className={`relative flex-1 h-[calc(100vh-4rem)] bg-[#030712] overflow-hidden select-none bg-dot-grid ${
+        draggingNodeId ? 'cursor-grabbing' : isPanning ? 'cursor-grabbing' : 'cursor-grab'
+      }`}
     >
       {/* Canvas Header / Overview Strip */}
       <div className="absolute top-4 left-6 z-20 pointer-events-none flex items-center gap-3">
@@ -149,20 +504,35 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
             {blueprint.tagline}
           </p>
         </div>
+
+        <div className="glass-tier-1 px-2.5 py-1.5 rounded pointer-events-auto hidden md:flex items-center gap-2 text-zinc-400">
+          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+          <span className="text-[11px] font-mono">
+            Scroll/Pinch to zoom • Drag blocks to move • Click wires to inspect flow
+          </span>
+        </div>
       </div>
 
       {/* Floating Canvas Controls */}
-      <div className="absolute bottom-6 right-6 z-20 flex items-center gap-2 glass-tier-1 p-1.5 rounded">
+      <div className="absolute bottom-6 right-6 z-20 flex items-center gap-1.5 sm:gap-2 glass-tier-1 p-1.5 rounded shadow-lg">
         <button
-          onClick={() => setZoom((z) => Math.min(z + 0.15, 1.8))}
-          title="Zoom In"
+          onClick={() => setZoom((z) => Math.min(z + 0.15, 2.4))}
+          title="Zoom In (Scroll Up or Pinch with Two Fingers)"
           className="p-1.5 rounded hover:bg-zinc-800 text-zinc-300 hover:text-white transition-colors"
         >
           <ZoomIn className="w-4 h-4" />
         </button>
+
+        <span
+          title="Current Zoom Scale"
+          className="font-mono text-[10px] text-zinc-300 select-none w-9 text-center font-medium"
+        >
+          {Math.round(zoom * 100)}%
+        </span>
+
         <button
-          onClick={() => setZoom((z) => Math.max(z - 0.15, 0.6))}
-          title="Zoom Out"
+          onClick={() => setZoom((z) => Math.max(z - 0.15, 0.4))}
+          title="Zoom Out (Scroll Down or Pinch with Two Fingers)"
           className="p-1.5 rounded hover:bg-zinc-800 text-zinc-300 hover:text-white transition-colors"
         >
           <ZoomOut className="w-4 h-4" />
@@ -172,10 +542,18 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
             setZoom(0.95);
             setPan({ x: 20, y: 10 });
           }}
-          title="Reset View"
+          title="Reset View (Pan/Zoom)"
           className="p-1.5 rounded hover:bg-zinc-800 text-zinc-300 hover:text-white transition-colors"
         >
           <Maximize2 className="w-4 h-4" />
+        </button>
+        <button
+          onClick={handleResetPositions}
+          title="Auto-Align: Reset all blocks back to standard column grid"
+          className="px-2 py-1 rounded hover:bg-zinc-800 text-zinc-300 hover:text-white transition-colors flex items-center gap-1.5 text-xs font-mono"
+        >
+          <RotateCcw className="w-3.5 h-3.5" />
+          <span className="hidden sm:inline">Auto-Align</span>
         </button>
         <div className="h-4 w-px bg-zinc-800" />
         <button
@@ -224,6 +602,9 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
             <filter id="wire-glow" x="-20%" y="-20%" width="140%" height="140%">
               <feDropShadow dx="0" dy="0" stdDeviation="3" floodColor={wireTheme.glow} floodOpacity="0.45" />
             </filter>
+            <filter id="wire-glow-hover" x="-30%" y="-30%" width="160%" height="160%">
+              <feDropShadow dx="0" dy="0" stdDeviation="5" floodColor={wireTheme.glowHover} floodOpacity="0.8" />
+            </filter>
           </defs>
 
           {blueprint.connections.map((conn) => {
@@ -244,49 +625,90 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
             // Cubic Bezier curve
             const pathD = `M ${x1} ${y1} C ${x1 + curve} ${y1}, ${x2 - curve} ${y2}, ${x2} ${y2}`;
 
+            const isHovered = hoveredConnId === conn.id;
+            const isSelected = selectedConn?.id === conn.id;
+            const isActive = isHovered || isSelected;
+
             return (
-              <g key={conn.id}>
+              <g key={conn.id} className="transition-all duration-150">
                 {/* Background ambient stroke */}
                 <path
                   d={pathD}
                   fill="none"
-                  stroke={wireTheme.ambient}
-                  strokeWidth="3"
+                  stroke={isActive ? wireTheme.highlight : wireTheme.ambient}
+                  strokeWidth={isActive ? '5' : '3'}
                   strokeLinecap="round"
+                  className="transition-all duration-150"
                 />
 
                 {/* Main data link */}
                 <path
                   d={pathD}
                   fill="none"
-                  stroke="url(#wire-gradient)"
-                  strokeWidth="1.5"
+                  stroke={isActive ? wireTheme.glowHover : 'url(#wire-gradient)'}
+                  strokeWidth={isActive ? '3' : '1.5'}
                   strokeLinecap="round"
-                  filter="url(#wire-glow)"
+                  filter={isActive ? 'url(#wire-glow-hover)' : 'url(#wire-glow)'}
+                  className="transition-all duration-150"
                 />
 
                 {/* Animated Packet Pulse */}
-                <circle r="3.5" fill={wireTheme.pulse} style={{ filter: `drop-shadow(0 0 6px ${wireTheme.pulse})` }}>
+                <circle
+                  r={isActive ? '5' : '3.5'}
+                  fill={isActive ? '#ffffff' : wireTheme.pulse}
+                  style={{
+                    filter: `drop-shadow(0 0 ${isActive ? '10px' : '6px'} ${wireTheme.pulse})`,
+                  }}
+                >
                   <animateMotion
                     path={pathD}
-                    dur={`${2.5 + Math.random() * 0.8}s`}
+                    dur={`${isActive ? 1.4 : 2.5 + Math.random() * 0.8}s`}
                     repeatCount="indefinite"
                     rotate="auto"
                   />
                 </circle>
 
-                {/* Connection Protocol Tag along midpoint */}
+                {/* Invisible wide hit-target path for easy clicking anywhere along the line */}
+                <path
+                  d={pathD}
+                  fill="none"
+                  stroke="transparent"
+                  strokeWidth="24"
+                  className="cursor-pointer pointer-events-auto"
+                  onMouseEnter={() => setHoveredConnId(conn.id)}
+                  onMouseLeave={() => setHoveredConnId(null)}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setSelectedConn(conn);
+                  }}
+                />
+
+                {/* Connection Protocol Tag along midpoint (Clickable) */}
                 <foreignObject
-                  x={(x1 + x2) / 2 - 40}
-                  y={(y1 + y2) / 2 - 10}
-                  width="80"
-                  height="20"
-                  className="overflow-visible"
+                  x={(x1 + x2) / 2 - 50}
+                  y={(y1 + y2) / 2 - 12}
+                  width="100"
+                  height="26"
+                  className="overflow-visible pointer-events-auto"
                 >
                   <div className="flex justify-center">
-                    <span className="font-mono text-[9px] px-1.5 py-0.5 rounded bg-zinc-950/90 border border-zinc-800 text-zinc-400 whitespace-nowrap shadow-sm">
-                      {conn.protocol.split('/')[0]}
-                    </span>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setSelectedConn(conn);
+                      }}
+                      onMouseEnter={() => setHoveredConnId(conn.id)}
+                      onMouseLeave={() => setHoveredConnId(null)}
+                      title={`Click to inspect ${conn.protocol} flow`}
+                      className={`font-mono text-[9px] px-2 py-0.5 rounded border transition-all cursor-pointer whitespace-nowrap shadow-sm flex items-center gap-1 ${
+                        isActive
+                          ? 'bg-indigo-600 text-white border-indigo-400 shadow-[0_0_15px_rgba(99,102,241,0.6)] scale-110 font-semibold ring-2 ring-indigo-400/40'
+                          : 'bg-zinc-950/90 border-zinc-800 text-zinc-400 hover:text-zinc-200 hover:border-zinc-600'
+                      }`}
+                    >
+                      <span>{conn.protocol.split('/')[0]}</span>
+                    </button>
                   </div>
                 </foreignObject>
               </g>
@@ -298,23 +720,39 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
         {blueprint.services.map((service) => {
           const Icon = getLayerIcon(service.layer);
           const isSelected = selectedNodeId === service.id;
+          const isDraggingThis = draggingNodeId === service.id;
+          const currentPos = nodePositions[service.id] || service.position;
+
+          const isConnectedToHovered =
+            hoveredConnId &&
+            (blueprint.connections.find((c) => c.id === hoveredConnId)?.from === service.id ||
+              blueprint.connections.find((c) => c.id === hoveredConnId)?.to === service.id);
+          const isConnectedToSelected =
+            selectedConn && (selectedConn.from === service.id || selectedConn.to === service.id);
+          const isWireConnected = isConnectedToHovered || isConnectedToSelected;
 
           return (
             <div
               key={service.id}
-              onClick={() => onSelectNode(service)}
+              onMouseDown={(e) => handleNodeMouseDown(e, service.id)}
+              onTouchStart={(e) => handleNodeTouchStart(e, service.id)}
               style={{
-                left: `${service.position.x}px`,
-                top: `${service.position.y}px`,
+                left: `${currentPos.x}px`,
+                top: `${currentPos.y}px`,
                 width: `${CARD_WIDTH}px`,
               }}
-              className={`node-card absolute z-10 p-3 rounded cursor-pointer transition-all duration-150 glass-tier-1 ${
-                isSelected
-                  ? 'node-glow-active bg-[#111827]/90 shadow-[0_0_25px_rgba(99,102,241,0.3)]'
-                  : 'hover:border-zinc-700/80 hover:bg-[#0c121e]'
+              title="Click & hold to move block, click to inspect"
+              className={`node-card group absolute p-3 rounded transition-all glass-tier-1 select-none ${
+                isDraggingThis
+                  ? 'z-30 cursor-grabbing shadow-[0_20px_45px_rgba(0,0,0,0.8),0_0_35px_rgba(99,102,241,0.55)] ring-2 ring-indigo-400 scale-[1.03] bg-[#111827]'
+                  : isSelected
+                  ? 'z-20 cursor-grab node-glow-active bg-[#111827]/90 shadow-[0_0_25px_rgba(99,102,241,0.3)]'
+                  : isWireConnected
+                  ? 'z-10 cursor-grab ring-2 ring-indigo-400 border-indigo-400 shadow-[0_0_25px_rgba(99,102,241,0.45)] bg-[#101726]/95 scale-[1.02]'
+                  : 'z-10 cursor-grab hover:border-zinc-700/80 hover:bg-[#0c121e]'
               }`}
             >
-              {/* Card Header: Icon, Name, Version Badge */}
+              {/* Card Header: Icon, Name, Version Badge & Drag Indicator */}
               <div className="flex items-center justify-between gap-1 mb-1.5">
                 <div className="flex items-center gap-2 min-w-0">
                   <div className="w-5 h-5 rounded bg-zinc-800/80 border border-zinc-700/60 flex items-center justify-center shrink-0">
@@ -324,9 +762,12 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
                     {service.name}
                   </span>
                 </div>
-                <span className="font-mono text-[10px] text-zinc-400 bg-zinc-800/60 px-1 py-0.5 rounded border border-zinc-700/40 shrink-0">
-                  {service.version}
-                </span>
+                <div className="flex items-center gap-1 shrink-0">
+                  <GripHorizontal className="w-3 h-3 text-zinc-500 opacity-50 group-hover:opacity-100 transition-opacity" />
+                  <span className="font-mono text-[10px] text-zinc-400 bg-zinc-800/60 px-1 py-0.5 rounded border border-zinc-700/40">
+                    {service.version}
+                  </span>
+                </div>
               </div>
 
               {/* Category */}
@@ -359,6 +800,19 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
           );
         })}
       </div>
+
+      {/* Connection Flow Inspector Modal */}
+      <ConnectionFlowModal
+        connection={selectedConn}
+        onClose={() => setSelectedConn(null)}
+        services={blueprint.services}
+        allConnections={blueprint.connections}
+        onSelectConnection={(newConn) => setSelectedConn(newConn)}
+        onInspectNode={(node) => {
+          setSelectedConn(null);
+          onSelectNode(node);
+        }}
+      />
     </div>
   );
 };

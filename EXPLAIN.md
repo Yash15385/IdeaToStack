@@ -249,6 +249,9 @@ sequenceDiagram
        * **Profile 2 (Autonomous AI Research Agent)**: Next.js 15 SSE, Cloudflare WAF, TypeScript Hono, Gemini 2.5 Flash, Qdrant Vector DB, Neon Postgres, Celery Workers, GCP Artifact Registry ($41/mo, 210ms).
        * **Profile 3 (High-Throughput Fintech SaaS)**: React 19, Cloudflare Edge, Go Fiber, PostgreSQL with Row-Level Security, Dragonfly, Temporal.io ($70/mo, 22ms).
        * **Profile 4 (Edge-First Global E-Commerce)**: Cloudflare Pages + Astro, Cloudflare WAF, Edge Workers, Cloudflare D1 SQL, Queues, R2 Storage ($35/mo, 12ms).
+  9. `getConnectionFlowDetails(blueprint, connection)`:
+     * Deep-analyzes any selected connection wire between service nodes.
+     * Identifies connected origin and destination nodes, all fanout peers sharing the same source, protocol definitions, transmission patterns, payload specifications, sample wire payload snippets, and security encryption policies.
 
 #### 12. [src/utils/stackEngine.test.ts](file:///d:/IdeaToStack/src/utils/stackEngine.test.ts)
 * **Role**: Automated unit test suite using Node.js's native test runner (`node:test` and `node:assert/strict`).
@@ -259,6 +262,7 @@ sequenceDiagram
   * `generateDockerCompose produces valid yaml syntax and depends_on blocks`
   * `generateEnvExample extracts all service env variables`
   * `swapService cleanly replaces target node and remaps connections`
+  * `getConnectionFlowDetails correctly extracts data type, protocols, and multi-block fanout`
 
 ---
 
@@ -291,7 +295,17 @@ sequenceDiagram
 #### 15. [src/components/TopologyCanvas.tsx](file:///d:/IdeaToStack/src/components/TopologyCanvas.tsx)
 * **Role**: Interactive visual graph displaying infrastructure nodes and network mesh connections.
 * **Key Features**:
-  * **Pan & Zoom World**: Supports mouse-drag panning, scroll zoom, and viewport reset (`ZoomIn`, `ZoomOut`, `Maximize2`).
+  * **Precision Pan & Zoom Engine**:
+    * **Mouse Wheel Zoom**: Smooth scroll zoom centered on the exact cursor world coordinates (`worldX = (cursorX - panX) / zoom`), clamped between 40% and 240%.
+    * **Trackpad Pinch-to-Zoom**: Supports trackpad gesture pinch (`e.ctrlKey`) with fine delta stepping.
+    * **Touchscreen Multi-Touch**: Two-finger pinch-to-zoom and two-finger panning on tablets and mobile screens with real-time Euclidean distance tracking.
+    * **Single-Finger Background Panning**: Allows dragging the canvas background on touch devices without triggering node moves.
+    * **Live Zoom Percentage Pill**: Toolbar indicator displaying current magnification (e.g., `100%`, `125%`) alongside quick `Zoom In`, `Zoom Out`, and `Reset (100%)` controls.
+  * **Interactive Block Dragging**: Full click-and-hold (mouse and touch) drag-and-drop support for any service card. SVG connection curves and animated pulses stretch and bend dynamically with the moving card in real time (60fps).
+  * **Auto-Align & Layout Reset**: One-click "Auto-Align" button in the canvas toolbar to instantly snap all repositioned blocks back into their aligned 5-lane architectural columns.
+  * **Interactive Connection Wire Inspector**:
+    * Hovering over any connection wire highlights it with an emerald glow and enlarges its hit zone.
+    * Clicking any connection wire opens the **Connection Flow Modal**, revealing connected blocks, flow direction, protocol details, data contracts, and security policies.
   * **5 Architectural Column Lanes**:
     * `Client / UI` (`x = 80px`)
     * `Edge & Security` (`x = 300px`)
@@ -302,7 +316,7 @@ sequenceDiagram
   * **Animated Packet Pulses**: SVG `<circle>` elements with `<animateMotion>` traversing along the Bezier curves, visually indicating live data flow.
   * **Protocol Badges**: Midpoint pill tags on connections displaying the protocol (`WSS`, `gRPC`, `PostgreSQL Wire`, `RESP3`, `S3 API`).
   * **Service Node Cards**: Displays layer icon, service name, version tag, category description, tag chips, cyan latency profile, and monthly cost. Highlights with an active glow when clicked.
-  * **Floating Canvas Toolbar**: Includes zoom controls and the `+ Add Service` button.
+  * **Floating Canvas Toolbar**: Includes zoom controls, zoom percentage badge, Auto-Align, and the `+ Add Service` button.
 
 #### 16. [src/components/ServiceMatrix.tsx](file:///d:/IdeaToStack/src/components/ServiceMatrix.tsx)
 * **Role**: Tabular catalog providing multi-tier inventory of all active services.
@@ -367,6 +381,16 @@ sequenceDiagram
   * **High Motivation Boost Ticker**: Appears when the Crimson Velocity theme is selected, displaying motivational developer quotes.
   * **Synthesis Telemetry Grid**: Displays active AI Studio model, fallback engine status, deployment mesh type, and live theme state.
   * **Zero-Flicker Persistence**: Preference is immediately written to `localStorage` and synchronized via `document.documentElement[data-theme]`.
+
+#### 22. [src/components/ConnectionFlowModal.tsx](file:///d:/IdeaToStack/src/components/ConnectionFlowModal.tsx)
+* **Role**: Interactive connection and wire flow inspector revealing connected blocks and in-flight payload specifications.
+* **Key Features**:
+  * **Interactive Line Hit Targets**: 24px wide transparent hit path on every Bezier curve and clickable midpoint protocol tags.
+  * **Visual Source & Target Inspection**: Displays source and target blocks with layer icons, category, exposed port bindings, and quick-jump "Inspect Node" buttons.
+  * **Dynamic Hover & Active Highlighting**: Hovering or clicking any wire illuminates the curve with a glowing accent and highlights the connected source and destination service cards.
+  * **Multi-Block Fanout Context**: Detects when a source service broadcasts to multiple downstream blocks, providing quick-switch navigation buttons.
+  * **In-Flight Data & Protocol Specifications**: Details the exact data format (PCM audio, Protobuf RPC, RESP3 commands, SQL queries, OTLP telemetry), transmission pattern, security encryption (TLS 1.3/mTLS/WSS), and latency SLAs.
+  * **Realistic Wire Payload Preview**: Shows a formatted JSON or protocol snippet illustrating sample data passing through the connection.
 
 ---
 
