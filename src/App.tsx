@@ -12,6 +12,7 @@ import { DecisionsView } from './components/DecisionsView';
 import { DeployExportView } from './components/DeployExportView';
 import { NodeInspectorModal } from './components/NodeInspectorModal';
 import { AddServiceModal } from './components/AddServiceModal';
+import { SettingsModal, ThemeMode } from './components/SettingsModal';
 import {
   StackBlueprint,
   StackServiceNode,
@@ -34,7 +35,28 @@ export default function App() {
   const [selectedNode, setSelectedNode] = useState<StackServiceNode | null>(null);
   const [isSynthesizing, setIsSynthesizing] = useState(false);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [theme, setTheme] = useState<ThemeMode>(() => {
+    const saved = localStorage.getItem('ideatostack_theme');
+    if (saved === 'light' || saved === 'red' || saved === 'dark') {
+      return saved;
+    }
+    return 'dark';
+  });
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  // Synchronize active theme with root DOM element
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme);
+    if (theme === 'light') {
+      document.documentElement.classList.remove('dark');
+      document.documentElement.classList.add('light');
+    } else {
+      document.documentElement.classList.remove('light');
+      document.documentElement.classList.add('dark');
+    }
+    localStorage.setItem('ideatostack_theme', theme);
+  }, [theme]);
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
@@ -132,6 +154,7 @@ export default function App() {
         onSynthesizeClick={() => handleSynthesize(blueprint.ideaPrompt, blueprint.constraints)}
         isSynthesizing={isSynthesizing}
         validationScore={blueprint.compatibilityScore}
+        onOpenSettings={() => setIsSettingsOpen(true)}
       />
 
       {/* Mobile Sub-Navigation Bar */}
@@ -190,6 +213,7 @@ export default function App() {
               selectedNodeId={selectedNode?.id || null}
               onSelectNode={(node) => setSelectedNode(node)}
               onAddNodeClick={() => setIsAddModalOpen(true)}
+              theme={theme}
             />
           )}
 
@@ -227,6 +251,23 @@ export default function App() {
         onClose={() => setIsAddModalOpen(false)}
         existingServices={blueprint.services}
         onAddService={handleAddService}
+      />
+
+      {/* Settings & Theme Switcher Modal */}
+      <SettingsModal
+        isOpen={isSettingsOpen}
+        onClose={() => setIsSettingsOpen(false)}
+        theme={theme}
+        onSelectTheme={(newTheme) => {
+          setTheme(newTheme);
+          showToast(
+            newTheme === 'red'
+              ? '⚡ Crimson Velocity (High Motivative) theme activated!'
+              : newTheme === 'light'
+              ? 'Technical Crisp (Light) theme activated'
+              : 'Midnight Void (Dark) theme activated'
+          );
+        }}
       />
 
       {/* Floating Status Notification Toast */}

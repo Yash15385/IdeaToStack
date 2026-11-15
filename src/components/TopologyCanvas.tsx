@@ -26,6 +26,7 @@ interface TopologyCanvasProps {
   selectedNodeId: string | null;
   onSelectNode: (node: StackServiceNode) => void;
   onAddNodeClick: () => void;
+  theme?: 'dark' | 'light' | 'red';
 }
 
 const LAYER_LABELS: Record<string, { label: string; x: number }> = {
@@ -60,6 +61,7 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
   selectedNodeId,
   onSelectNode,
   onAddNodeClick,
+  theme = 'dark',
 }) => {
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
@@ -99,6 +101,35 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
   blueprint.services.forEach((s) => {
     serviceCoordMap.set(s.id, { x: s.position.x, y: s.position.y });
   });
+
+  // Theme-aware wire & pulse color schemes
+  const wireTheme =
+    theme === 'red'
+      ? {
+          stop1: '#f43f5e',
+          stop2: '#fb923c',
+          stop3: '#e11d48',
+          glow: '#e11d48',
+          ambient: '#3a0812',
+          pulse: '#fb7185',
+        }
+      : theme === 'light'
+      ? {
+          stop1: '#4f46e5',
+          stop2: '#0284c7',
+          stop3: '#059669',
+          glow: '#4f46e5',
+          ambient: '#cbd5e1',
+          pulse: '#0284c7',
+        }
+      : {
+          stop1: '#6366f1',
+          stop2: '#38bdf8',
+          stop3: '#10b981',
+          glow: '#6366f1',
+          ambient: '#1e2230',
+          pulse: '#38bdf8',
+        };
 
   return (
     <div
@@ -186,12 +217,12 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
         <svg className="absolute inset-0 w-full h-full pointer-events-none z-0">
           <defs>
             <linearGradient id="wire-gradient" x1="0%" y1="0%" x2="100%" y2="0%">
-              <stop offset="0%" stopColor="#6366f1" stopOpacity="0.7" />
-              <stop offset="50%" stopColor="#38bdf8" stopOpacity="0.7" />
-              <stop offset="100%" stopColor="#10b981" stopOpacity="0.7" />
+              <stop offset="0%" stopColor={wireTheme.stop1} stopOpacity="0.75" />
+              <stop offset="50%" stopColor={wireTheme.stop2} stopOpacity="0.75" />
+              <stop offset="100%" stopColor={wireTheme.stop3} stopOpacity="0.75" />
             </linearGradient>
             <filter id="wire-glow" x="-20%" y="-20%" width="140%" height="140%">
-              <feDropShadow dx="0" dy="0" stdDeviation="3" floodColor="#6366f1" floodOpacity="0.4" />
+              <feDropShadow dx="0" dy="0" stdDeviation="3" floodColor={wireTheme.glow} floodOpacity="0.45" />
             </filter>
           </defs>
 
@@ -219,7 +250,7 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
                 <path
                   d={pathD}
                   fill="none"
-                  stroke="#1e2230"
+                  stroke={wireTheme.ambient}
                   strokeWidth="3"
                   strokeLinecap="round"
                 />
@@ -235,7 +266,7 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
                 />
 
                 {/* Animated Packet Pulse */}
-                <circle r="3.5" fill="#38bdf8" className="shadow-[0_0_8px_#38bdf8]">
+                <circle r="3.5" fill={wireTheme.pulse} style={{ filter: `drop-shadow(0 0 6px ${wireTheme.pulse})` }}>
                   <animateMotion
                     path={pathD}
                     dur={`${2.5 + Math.random() * 0.8}s`}

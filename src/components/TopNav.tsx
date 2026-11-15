@@ -4,7 +4,7 @@
  */
 
 import React from 'react';
-import { Layers, Terminal, Sparkles, CheckCircle2 } from 'lucide-react';
+import { Layers, Terminal, Sparkles, CheckCircle2, Settings } from 'lucide-react';
 
 export type ActiveTab = 'canvas' | 'matrix' | 'decisions' | 'deploy';
 
@@ -14,6 +14,7 @@ interface TopNavProps {
   onSynthesizeClick: () => void;
   isSynthesizing: boolean;
   validationScore: number;
+  onOpenSettings?: () => void;
 }
 
 export const TopNav: React.FC<TopNavProps> = ({
@@ -22,6 +23,7 @@ export const TopNav: React.FC<TopNavProps> = ({
   onSynthesizeClick,
   isSynthesizing,
   validationScore,
+  onOpenSettings,
 }) => {
   return (
     <header className="h-16 px-6 border-b border-zinc-800/80 bg-[#090d16]/90 backdrop-blur-md sticky top-0 z-40 flex items-center justify-between gap-8">
@@ -105,6 +107,17 @@ export const TopNav: React.FC<TopNavProps> = ({
           <span className="hidden sm:inline">{isSynthesizing ? 'Synthesizing...' : 'Synthesize Architecture'}</span>
           <span className="sm:hidden">{isSynthesizing ? '...' : 'Synthesize'}</span>
         </button>
+
+        {onOpenSettings && (
+          <button
+            onClick={onOpenSettings}
+            title="Theme & Settings"
+            aria-label="Settings and Theme preferences"
+            className="p-2 text-zinc-400 hover:text-zinc-100 bg-zinc-900/70 hover:bg-zinc-800/80 border border-zinc-800/80 hover:border-zinc-700 rounded-md transition-all flex items-center justify-center shrink-0 shadow-sm"
+          >
+            <Settings className="w-4 h-4" />
+          </button>
+        )}
       </div>
     </header>
   );

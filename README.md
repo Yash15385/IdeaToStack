@@ -48,6 +48,11 @@
   * Annotated `.env.example` file aggregating environment tokens across all services.
   * CLI quickstart bootstrap commands.
   * Full `ARCHITECTURE.md` design document and downloadable JSON blueprints.
+* **Multi-Theme Engine & Settings Modal**:
+  * **Midnight Void (`dark`)**: Technical minimalism with dark glassmorphism & electric indigo accents (default).
+  * **Technical Crisp (`light`)**: High-contrast, clean daylight architectural aesthetic with slate borders & crisp readability.
+  * **Crimson Velocity (`red`)**: High-energy, hyper-focused motivational red theme with fiery glowing borders, live developer momentum ticker, and theme-synchronized SVG wire & packet pulses.
+  * Persistent storage in `localStorage` with zero layout shift or flash.
 * **Modern Developer Aesthetic**: Engineered with dark glassmorphism, dot-grid canvas textures, hairline borders, and Geist / Inter / JetBrains Mono typography.
 
 ---
