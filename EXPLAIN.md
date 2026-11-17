@@ -306,12 +306,9 @@ sequenceDiagram
   * **Interactive Connection Wire Inspector**:
     * Hovering over any connection wire highlights it with an emerald glow and enlarges its hit zone.
     * Clicking any connection wire opens the **Connection Flow Modal**, revealing connected blocks, flow direction, protocol details, data contracts, and security policies.
-  * **5 Architectural Column Lanes**:
-    * `Client / UI` (`x = 80px`)
-    * `Edge & Security` (`x = 300px`)
-    * `Compute & API` (`x = 520px`)
-    * `Data & Persistence` (`x = 740px`)
-    * `Async & Queue` (`x = 960px`)
+  * **Attached Architecture Layer Badges**:
+    * Rather than static background column guides that lose context when blocks are moved, each service block carries an attached, color-coded layer pill directly on its card header (`CLIENT / UI`, `EDGE & SECURITY`, `COMPUTE & API`, `DATA & PERSISTENCE`, `ASYNC & QUEUE`, `INFRA & STORAGE`).
+    * The layer identity travels wherever the card is dragged across the freeform infinite canvas.
   * **Cubic Bezier SVG Wiring**: Computes smooth curves from the right anchor of origin nodes to the left anchor of destination nodes.
   * **Animated Packet Pulses**: SVG `<circle>` elements with `<animateMotion>` traversing along the Bezier curves, visually indicating live data flow.
   * **Protocol Badges**: Midpoint pill tags on connections displaying the protocol (`WSS`, `gRPC`, `PostgreSQL Wire`, `RESP3`, `S3 API`).

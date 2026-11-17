@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import {
   Server,
   Database,
@@ -33,13 +33,48 @@ interface TopologyCanvasProps {
   onUpdateNodePosition?: (nodeId: string, position: { x: number; y: number }) => void;
 }
 
-const LAYER_LABELS: Record<string, { label: string; x: number }> = {
-  client: { label: 'Client / UI', x: 80 },
-  edge: { label: 'Edge & Security', x: 300 },
-  compute: { label: 'Compute & API', x: 520 },
-  data: { label: 'Data & Persistence', x: 740 },
-  async: { label: 'Async & Queue', x: 960 },
+const LAYER_BADGES: Record<string, { label: string; badge: string; text: string }> = {
+  client: {
+    label: 'Client / UI',
+    badge: 'bg-sky-500/10 text-sky-400 border-sky-500/30',
+    text: 'text-sky-400',
+  },
+  edge: {
+    label: 'Edge & Security',
+    badge: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30',
+    text: 'text-emerald-400',
+  },
+  compute: {
+    label: 'Compute & API',
+    badge: 'bg-indigo-500/10 text-indigo-400 border-indigo-500/30',
+    text: 'text-indigo-400',
+  },
+  data: {
+    label: 'Data & Persistence',
+    badge: 'bg-amber-500/10 text-amber-400 border-amber-500/30',
+    text: 'text-amber-400',
+  },
+  async: {
+    label: 'Async & Queue',
+    badge: 'bg-purple-500/10 text-purple-400 border-purple-500/30',
+    text: 'text-purple-400',
+  },
+  infra: {
+    label: 'Infra & Storage',
+    badge: 'bg-cyan-500/10 text-cyan-400 border-cyan-500/30',
+    text: 'text-cyan-400',
+  },
 };
+
+function getLayerBadge(layer: string) {
+  return (
+    LAYER_BADGES[layer] || {
+      label: layer.toUpperCase(),
+      badge: 'bg-zinc-800 text-zinc-400 border-zinc-700',
+      text: 'text-zinc-400',
+    }
+  );
+}
 
 function getLayerIcon(layer: string) {
   switch (layer) {
@@ -440,14 +475,139 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
 
   // Node dimension constants for wiring anchor calculations
   const CARD_WIDTH = 200;
-  const CARD_HEIGHT = 120;
+  const CARD_HEIGHT = 136;
 
   // Build service coordinate map from current nodePositions so wires dynamically follow moving blocks
-  const serviceCoordMap = new Map<string, { x: number; y: number }>();
-  blueprint.services.forEach((s) => {
-    const pos = nodePositions[s.id] || s.position;
-    serviceCoordMap.set(s.id, { x: pos.x, y: pos.y });
-  });
+  const serviceCoordMap = useMemo(() => {
+    const map = new Map<string, { x: number; y: number }>();
+    blueprint.services.forEach((s) => {
+      const pos = nodePositions[s.id] || s.position;
+      map.set(s.id, { x: pos.x, y: pos.y });
+    });
+    return map;
+  }, [blueprint.services, nodePositions]);
+
+  // Smart multi-directional anchor & cubic Bezier curve calculation that adapts to any node position & distance
+  const connectionRoutes = useMemo(() => {
+    return blueprint.connections
+      .map((conn) => {
+        const fromPos = serviceCoordMap.get(conn.from);
+        const toPos = serviceCoordMap.get(conn.to);
+
+        if (!fromPos || !toPos) return null;
+
+        const fromCx = fromPos.x + CARD_WIDTH / 2;
+        const fromCy = fromPos.y + CARD_HEIGHT / 2;
+        const toCx = toPos.x + CARD_WIDTH / 2;
+        const toCy = toPos.y + CARD_HEIGHT / 2;
+
+        const dx = toCx - fromCx;
+        const dy = toCy - fromCy;
+
+        let x1 = 0;
+        let y1 = 0;
+        let x2 = 0;
+        let y2 = 0;
+        let cp1X = 0;
+        let cp1Y = 0;
+        let cp2X = 0;
+        let cp2Y = 0;
+
+        // Determine best routing direction based on relative position
+        if (Math.abs(dx) >= Math.abs(dy) * 0.75) {
+          // Horizontal orientation
+          if (toCx >= fromCx) {
+            // Standard: Source Right -> Target Left
+            x1 = fromPos.x + CARD_WIDTH;
+            y1 = fromPos.y + CARD_HEIGHT / 2;
+            x2 = toPos.x;
+            y2 = toPos.y + CARD_HEIGHT / 2;
+
+            const distX = Math.max(Math.abs(x2 - x1), 40);
+            const cpOffset = Math.max(distX * 0.45, 40);
+            cp1X = x1 + cpOffset;
+            cp1Y = y1;
+            cp2X = x2 - cpOffset;
+            cp2Y = y2;
+          } else {
+            // Inverted: Source Left -> Target Right (target dragged behind source)
+            x1 = fromPos.x;
+            y1 = fromPos.y + CARD_HEIGHT / 2;
+            x2 = toPos.x + CARD_WIDTH;
+            y2 = toPos.y + CARD_HEIGHT / 2;
+
+            const distX = Math.max(Math.abs(x1 - x2), 40);
+            const cpOffset = Math.max(distX * 0.45, 40);
+            cp1X = x1 - cpOffset;
+            cp1Y = y1;
+            cp2X = x2 + cpOffset;
+            cp2Y = y2;
+          }
+        } else {
+          // Vertical orientation (target placed directly above/below source)
+          if (toCy >= fromCy) {
+            // Source Bottom -> Target Top
+            x1 = fromPos.x + CARD_WIDTH / 2;
+            y1 = fromPos.y + CARD_HEIGHT;
+            x2 = toPos.x + CARD_WIDTH / 2;
+            y2 = toPos.y;
+
+            const distY = Math.max(Math.abs(y2 - y1), 40);
+            const cpOffset = Math.max(distY * 0.45, 40);
+            cp1X = x1;
+            cp1Y = y1 + cpOffset;
+            cp2X = x2;
+            cp2Y = y2 - cpOffset;
+          } else {
+            // Source Top -> Target Bottom
+            x1 = fromPos.x + CARD_WIDTH / 2;
+            y1 = fromPos.y;
+            x2 = toPos.x + CARD_WIDTH / 2;
+            y2 = toPos.y + CARD_HEIGHT;
+
+            const distY = Math.max(Math.abs(y1 - y2), 40);
+            const cpOffset = Math.max(distY * 0.45, 40);
+            cp1X = x1;
+            cp1Y = y1 - cpOffset;
+            cp2X = x2;
+            cp2Y = y2 + cpOffset;
+          }
+        }
+
+        const pathD = `M ${x1} ${y1} C ${cp1X} ${cp1Y}, ${cp2X} ${cp2Y}, ${x2} ${y2}`;
+
+        // Precise midpoint at t = 0.5 along the cubic Bezier curve
+        const midX = 0.125 * x1 + 0.375 * cp1X + 0.375 * cp2X + 0.125 * x2;
+        const midY = 0.125 * y1 + 0.375 * cp1Y + 0.375 * cp2Y + 0.125 * y2;
+
+        const isHovered = hoveredConnId === conn.id;
+        const isSelected = selectedConn?.id === conn.id;
+        const isActive = isHovered || isSelected;
+
+        return {
+          conn,
+          x1,
+          y1,
+          x2,
+          y2,
+          pathD,
+          midX,
+          midY,
+          isActive,
+        };
+      })
+      .filter(Boolean) as Array<{
+      conn: StackConnection;
+      x1: number;
+      y1: number;
+      x2: number;
+      y2: number;
+      pathD: string;
+      midX: number;
+      midY: number;
+      isActive: boolean;
+    }>;
+  }, [blueprint.connections, serviceCoordMap, hoveredConnId, selectedConn]);
 
   // Theme-aware wire & pulse color schemes
   const wireTheme =
@@ -571,63 +731,41 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
           transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
           transformOrigin: '0 0',
           transition: isPanning ? 'none' : 'transform 0.05s ease-out',
+          overflow: 'visible',
         }}
-        className="w-[1400px] h-[750px] relative"
+        className="w-[1400px] h-[750px] relative overflow-visible"
       >
-        {/* Layer Guides & Headers */}
-        {Object.entries(LAYER_LABELS).map(([key, info]) => (
-          <div
-            key={key}
-            style={{ left: `${info.x}px` }}
-            className="absolute top-12 w-[200px] pointer-events-none"
-          >
-            <div className="border-b border-zinc-800/80 pb-1 mb-4 flex items-center justify-between">
-              <span className="text-[11px] font-mono uppercase tracking-wider text-zinc-400">
-                {info.label}
-              </span>
-            </div>
-            {/* Faint vertical column guide */}
-            <div className="h-[580px] w-px bg-gradient-to-b from-zinc-800/40 via-zinc-800/10 to-transparent" />
-          </div>
-        ))}
-
         {/* SVG Wiring Connections & Packet Pulses */}
-        <svg className="absolute inset-0 w-full h-full pointer-events-none z-0">
+        <svg
+          className="absolute inset-0 w-full h-full pointer-events-none z-0 overflow-visible"
+          style={{ overflow: 'visible' }}
+        >
           <defs>
-            <linearGradient id="wire-gradient" x1="0%" y1="0%" x2="100%" y2="0%">
-              <stop offset="0%" stopColor={wireTheme.stop1} stopOpacity="0.75" />
-              <stop offset="50%" stopColor={wireTheme.stop2} stopOpacity="0.75" />
-              <stop offset="100%" stopColor={wireTheme.stop3} stopOpacity="0.75" />
-            </linearGradient>
-            <filter id="wire-glow" x="-20%" y="-20%" width="140%" height="140%">
+            <filter id="wire-glow" x="-100%" y="-100%" width="300%" height="300%">
               <feDropShadow dx="0" dy="0" stdDeviation="3" floodColor={wireTheme.glow} floodOpacity="0.45" />
             </filter>
-            <filter id="wire-glow-hover" x="-30%" y="-30%" width="160%" height="160%">
+            <filter id="wire-glow-hover" x="-100%" y="-100%" width="300%" height="300%">
               <feDropShadow dx="0" dy="0" stdDeviation="5" floodColor={wireTheme.glowHover} floodOpacity="0.8" />
             </filter>
+            {connectionRoutes.map((route) => (
+              <linearGradient
+                key={`grad-${route.conn.id}`}
+                id={`wire-grad-${route.conn.id}`}
+                gradientUnits="userSpaceOnUse"
+                x1={route.x1}
+                y1={route.y1}
+                x2={route.x2}
+                y2={route.y2}
+              >
+                <stop offset="0%" stopColor={wireTheme.stop1} stopOpacity="0.85" />
+                <stop offset="50%" stopColor={wireTheme.stop2} stopOpacity="0.85" />
+                <stop offset="100%" stopColor={wireTheme.stop3} stopOpacity="0.85" />
+              </linearGradient>
+            ))}
           </defs>
 
-          {blueprint.connections.map((conn) => {
-            const fromPos = serviceCoordMap.get(conn.from);
-            const toPos = serviceCoordMap.get(conn.to);
-
-            if (!fromPos || !toPos) return null;
-
-            // Connect from right edge of source to left edge of target
-            const x1 = fromPos.x + CARD_WIDTH;
-            const y1 = fromPos.y + CARD_HEIGHT / 2;
-            const x2 = toPos.x;
-            const y2 = toPos.y + CARD_HEIGHT / 2;
-
-            const dx = Math.abs(x2 - x1);
-            const curve = Math.max(dx * 0.45, 40);
-
-            // Cubic Bezier curve
-            const pathD = `M ${x1} ${y1} C ${x1 + curve} ${y1}, ${x2 - curve} ${y2}, ${x2} ${y2}`;
-
-            const isHovered = hoveredConnId === conn.id;
-            const isSelected = selectedConn?.id === conn.id;
-            const isActive = isHovered || isSelected;
+          {connectionRoutes.map((route) => {
+            const { conn, pathD, isActive } = route;
 
             return (
               <g key={conn.id} className="transition-all duration-150">
@@ -641,11 +779,11 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
                   className="transition-all duration-150"
                 />
 
-                {/* Main data link */}
+                {/* Main data link with per-connection gradient */}
                 <path
                   d={pathD}
                   fill="none"
-                  stroke={isActive ? wireTheme.glowHover : 'url(#wire-gradient)'}
+                  stroke={isActive ? wireTheme.glowHover : `url(#wire-grad-${conn.id})`}
                   strokeWidth={isActive ? '3' : '1.5'}
                   strokeLinecap="round"
                   filter={isActive ? 'url(#wire-glow-hover)' : 'url(#wire-glow)'}
@@ -682,43 +820,51 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
                     setSelectedConn(conn);
                   }}
                 />
-
-                {/* Connection Protocol Tag along midpoint (Clickable) */}
-                <foreignObject
-                  x={(x1 + x2) / 2 - 50}
-                  y={(y1 + y2) / 2 - 12}
-                  width="100"
-                  height="26"
-                  className="overflow-visible pointer-events-auto"
-                >
-                  <div className="flex justify-center">
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setSelectedConn(conn);
-                      }}
-                      onMouseEnter={() => setHoveredConnId(conn.id)}
-                      onMouseLeave={() => setHoveredConnId(null)}
-                      title={`Click to inspect ${conn.protocol} flow`}
-                      className={`font-mono text-[9px] px-2 py-0.5 rounded border transition-all cursor-pointer whitespace-nowrap shadow-sm flex items-center gap-1 ${
-                        isActive
-                          ? 'bg-indigo-600 text-white border-indigo-400 shadow-[0_0_15px_rgba(99,102,241,0.6)] scale-110 font-semibold ring-2 ring-indigo-400/40'
-                          : 'bg-zinc-950/90 border-zinc-800 text-zinc-400 hover:text-zinc-200 hover:border-zinc-600'
-                      }`}
-                    >
-                      <span>{conn.protocol.split('/')[0]}</span>
-                    </button>
-                  </div>
-                </foreignObject>
               </g>
             );
           })}
         </svg>
 
+        {/* Connection Protocol Tags Layer (Clickable HTML Pills) */}
+        {connectionRoutes.map((route) => {
+          const { conn, midX, midY, isActive } = route;
+          return (
+            <div
+              key={`badge-${conn.id}`}
+              style={{
+                position: 'absolute',
+                left: `${midX}px`,
+                top: `${midY}px`,
+                transform: 'translate(-50%, -50%)',
+                zIndex: 5,
+              }}
+              className="pointer-events-auto"
+            >
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setSelectedConn(conn);
+                }}
+                onMouseEnter={() => setHoveredConnId(conn.id)}
+                onMouseLeave={() => setHoveredConnId(null)}
+                title={`Click to inspect ${conn.protocol} flow`}
+                className={`font-mono text-[9px] px-2 py-0.5 rounded border transition-all cursor-pointer whitespace-nowrap shadow-sm flex items-center gap-1 ${
+                  isActive
+                    ? 'bg-indigo-600 text-white border-indigo-400 shadow-[0_0_15px_rgba(99,102,241,0.6)] scale-110 font-semibold ring-2 ring-indigo-400/40'
+                    : 'bg-zinc-950/90 border-zinc-800 text-zinc-400 hover:text-zinc-200 hover:border-zinc-600'
+                }`}
+              >
+                <span>{conn.protocol.split('/')[0]}</span>
+              </button>
+            </div>
+          );
+        })}
+
         {/* Service Node Cards */}
         {blueprint.services.map((service) => {
           const Icon = getLayerIcon(service.layer);
+          const layerBadge = getLayerBadge(service.layer);
           const isSelected = selectedNodeId === service.id;
           const isDraggingThis = draggingNodeId === service.id;
           const currentPos = nodePositions[service.id] || service.position;
@@ -752,22 +898,29 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
                   : 'z-10 cursor-grab hover:border-zinc-700/80 hover:bg-[#0c121e]'
               }`}
             >
-              {/* Card Header: Icon, Name, Version Badge & Drag Indicator */}
-              <div className="flex items-center justify-between gap-1 mb-1.5">
-                <div className="flex items-center gap-2 min-w-0">
-                  <div className="w-5 h-5 rounded bg-zinc-800/80 border border-zinc-700/60 flex items-center justify-center shrink-0">
-                    <Icon className="w-3 h-3 text-indigo-400" />
-                  </div>
-                  <span className="font-semibold text-xs text-zinc-100 font-['Geist'] truncate">
-                    {service.name}
-                  </span>
-                </div>
+              {/* Attached Layer Badge Header */}
+              <div className="flex items-center justify-between gap-1 mb-2 pb-1.5 border-b border-zinc-800/60">
+                <span
+                  className={`font-mono text-[9px] uppercase tracking-wider font-semibold px-1.5 py-0.5 rounded border ${layerBadge.badge}`}
+                >
+                  {layerBadge.label}
+                </span>
                 <div className="flex items-center gap-1 shrink-0">
                   <GripHorizontal className="w-3 h-3 text-zinc-500 opacity-50 group-hover:opacity-100 transition-opacity" />
-                  <span className="font-mono text-[10px] text-zinc-400 bg-zinc-800/60 px-1 py-0.5 rounded border border-zinc-700/40">
+                  <span className="font-mono text-[9px] text-zinc-400 bg-zinc-800/60 px-1 py-0.5 rounded border border-zinc-700/40">
                     {service.version}
                   </span>
                 </div>
+              </div>
+
+              {/* Service Icon & Name */}
+              <div className="flex items-center gap-1.5 min-w-0 mb-1">
+                <div className="w-5 h-5 rounded bg-zinc-800/80 border border-zinc-700/60 flex items-center justify-center shrink-0">
+                  <Icon className={`w-3 h-3 ${layerBadge.text}`} />
+                </div>
+                <span className="font-semibold text-xs text-zinc-100 font-['Geist'] truncate" title={service.name}>
+                  {service.name}
+                </span>
               </div>
 
               {/* Category */}
